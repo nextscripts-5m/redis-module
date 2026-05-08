@@ -1,4 +1,38 @@
+<!-- omit in toc -->
 # Chapter 1 - Redis Fundamentals
+
+- [Why Redis in Microservice Architectures](#why-redis-in-microservice-architectures)
+- [Execution Model and Core Architecture](#execution-model-and-core-architecture)
+  - [Why this matters](#why-this-matters)
+- [Latency Hierarchy: Why RAM Changes the Game](#latency-hierarchy-why-ram-changes-the-game)
+  - [Architecture Highlights](#architecture-highlights)
+- [Data Model and Native Data Structures](#data-model-and-native-data-structures)
+  - [Single-node deployment (Docker)](#single-node-deployment-docker)
+  - [String](#string)
+  - [Hash](#hash)
+  - [List](#list)
+  - [Set](#set)
+    - [Bloom Filter](#bloom-filter)
+  - [Sorted Set](#sorted-set)
+  - [Stream](#stream)
+    - [Idempotation](#idempotation)
+  - [HyperLogLog](#hyperloglog)
+- [Atomicity, Transactions, and Concurrency Control](#atomicity-transactions-and-concurrency-control)
+  - [Single-command atomicity](#single-command-atomicity)
+  - [MULTI / EXEC transactions](#multi--exec-transactions)
+  - [WATCH for optimistic concurrency](#watch-for-optimistic-concurrency)
+- [TTL, Expiration, and Eviction](#ttl-expiration-and-eviction)
+  - [TTL and expiration](#ttl-and-expiration)
+  - [Eviction policies](#eviction-policies)
+- [Persistence Modes and Trade-offs](#persistence-modes-and-trade-offs)
+- [Deployment Models (Preview)](#deployment-models-preview)
+  - [Single node](#single-node)
+  - [Replication](#replication)
+  - [Sentinel](#sentinel)
+  - [Cluster](#cluster)
+- [Key Takeaways](#key-takeaways)
+- [Reference](#reference)
+
 
 ## Why Redis in Microservice Architectures
 
@@ -357,22 +391,154 @@ SCARD SocialMedia
 * Insertion in a Bloom filter is `O(K)`, where `k` is the number of hash functions.
 * Checking for an item is `O(K)` or `O(K*n)` for stacked filters, where n is the number of stacked filters.
 
+**Try it out!**
+
+
+* **`BF.RESERVE`** creates the Bloom filter **before** any insert, with an explicit **false-positive rate** and **expected capacity** (how many distinct items you plan to add before sizing/scaling becomes critical). That makes memory and precision predictable in production instead of relying on defaults created on the first `BF.ADD`. If you omit `BF.RESERVE`, the first `BF.ADD` on a new key creates a filter using **implementation defaults**.
+
+Example session:
+
+```text
+BF.RESERVE usernames 0.01 100000
+OK
+BF.ADD usernames alice
+(integer) 1
+BF.ADD usernames alice
+(integer) 0
+BF.EXISTS usernames alice
+(integer) 1
+BF.EXISTS usernames bob
+(integer) 0
+BF.MADD usernames bob carol
+1) (integer) 1
+2) (integer) 1
+```
+
+* `BF.EXISTS` can still report **false positives** (rare if the filter is sized well); there are **no false negatives** for items you have successfully added.
 
 ### Sorted Set
 
 - When fast access to the middle of a large collection of elements is important, we use Sorted Sets
 - Best for ranking, scoreboards, and priority-like retrieval.
+  - Leaderboards. For example, you can use sorted sets to easily maintain ordered lists of the highest scores in a massive online game.
+  - Rate limiters. In particular, you can use a sorted set to build a sliding-window rate limiter to prevent excessive API requests.
 - Typical commands: `ZADD`, `ZRANGE`, `ZREVRANGE`.
+
+* Every element in a sorted set is associated with a floating point value, called the *score*. They are ordered according to the following rule:
+  * If B and A are two elements with a different score, then A > B if A.score is > B.score.
+  * If B and A have exactly the same score, then A > B if the A string is lexicographically greater than the B string. B and A strings can't be equal since sorted sets only have unique elements.
+
+```bash
+> ZADD racer_scores 10 "Norem"
+(integer) 1
+> ZADD racer_scores 12 "Castilla"
+(integer) 1
+> ZADD racer_scores 8 "Sam-Bodden" 10 "Royce" 6 "Ford" 14 "Prickett"
+(integer) 4
+
+# ascending order
+# 0: first element
+# -1: last element
+# use ZREVRANGE for descending order
+> ZRANGE racer_scores 0 -1
+1) "Ford"
+2) "Sam-Bodden"
+3) "Norem"
+4) "Royce"
+5) "Castilla"
+6) "Prickett"
+```
 
 ### Stream
 
 - Best for append-only event flows with consumer groups and acknowledgments.
+- A Redis stream is a data structure that acts like an append-only log but also implements several operations to overcome some of the limits of a typical append-only log. These include random access in `O(1)` time and complex consumption strategies, such as consumer groups. You can use streams to record and simultaneously syndicate events in real time. Examples of Redis stream use cases include:
+  - Event sourcing (e.g., tracking user actions, clicks, etc.)
+  - Sensor monitoring (e.g., readings from devices in the field)
+  - Notifications (e.g., storing a record of each user's notifications in a separate stream)
 - Typical commands: `XADD`, `XREADGROUP`, `XACK`.
 
-### Bitmap and HyperLogLog
+```bash
+# with "*" we want the server to generate the entry ID
+> XADD race:france * rider Castilla speed 30.2 position 1 location_id 1
+"1778238161339-0"
+> XADD race:france * rider Norem speed 28.8 position 3 location_id 1
+"1778238177018-0"
+> XADD race:france * rider Prickett speed 29.7 position 2 location_id 1
+"1778238185041-0"
+> XRANGE race:france 1778238185041-0 + COUNT 2
+1) 1) "1778238185041-0"
+   2) 1) "rider"
+      2) "Prickett"
+      3) "speed"
+      4) "29.7"
+      5) "position"
+      6) "2"
+      7) "location_id"
+      8) "1"
 
-- Bitmap: efficient bit-level tracking (feature flags, daily active markers).
-- HyperLogLog: approximate cardinality at very low memory cost.
+
+> XLEN race:france
+(integer) 3
+```
+
+#### Idempotation
+
+> Idempotent message processing ensures that handling the same message multiple times produces the same system state as handling it once.
+
+* Redis streams support idempotent message processing (at-most-once production) to prevent duplicate entries when using at-least-once delivery patterns. This feature enables reliable message submission with automatic deduplication.
+
+**Idempotency modes**
+
+```bash
+XADD mystream IDMP producer-1 iid-1 * field value      # producer-1 (pid) and iid-1 (iid) are provided manually
+XADD mystream IDMPAUTO producer-2 * field value        # producer-2 (pid) is provided manually, Redis provides the iid
+```
+
+![](./images/idempotency.png)
+
+### HyperLogLog
+
+- HyperLogLog (HLL) estimates the **cardinality** of a set: “**about how many distinct elements** have I seen?” It **trades exact counts for bounded memory**: counting uniques with a normal `SET` grows roughly with the number of distinct values you must remember; an HLL keeps a **small fixed sketch** instead of the elements themselves.
+
+**Redis in practice (from the official description)**  
+
+- The Redis implementation uses **up to about 12 KB per key** and targets a **standard error near 0.81%**
+
+**Core commands**
+
+| Command | Role |
+|--------|------|
+| `PFADD key element [element …]` | Observe one or more values; updates the sketch. |
+| `PFCOUNT key [key …]` | Estimated cardinality of **one** HLL, or of the **union** of several keys if you pass multiple keys (coarser “zoomed out” view, e.g. a neighborhood made of many intersections). |
+| `PFMERGE destkey sourcekey [sourcekey …]` | Materialize a new HLL whose estimate matches the **union** of the sources (same idea as counting several sketches at once, but persisted under `destkey`). |
+
+**Worked example (Redis CLI style)**
+
+```bash
+> PFADD bikes Hyperion Deimos Phoebe Quaoar
+(integer) 1
+> PFCOUNT bikes
+(integer) 4
+> PFADD commuter_bikes Salacia Mimas Quaoar
+(integer) 1
+> PFMERGE all_bikes bikes commuter_bikes
+OK
+> PFCOUNT all_bikes
+(integer) 6
+```
+
+**Intuition from a “traffic heat map” mental model**  
+
+Imagine one HLL **per intersection**, and each passing vehicle contributes an identifier (e.g. a license plate hash) via `PFADD`. A **hotter** intersection shows a **higher** `PFCOUNT`. Calling `PFCOUNT` on **many intersection keys at once** approximates distinct vehicles over the **union** of those roads—useful when you zoom from one corner to a whole district.
+
+**Privacy and duplicates (why this is not a spy database)**  
+
+The sketch does **not** store the raw elements: you cannot “list” or export what was added, only ask for an **estimate**.
+
+**When *not* to use HLL**  
+
+If you need **membership tests**, iteration, or **exact** counts, use a **`SET`** (or another exact structure). HLL is for **large** streams of observations where approximate cardinality and **fixed memory** matter more than perfection.
 
 ---
 
@@ -468,3 +634,5 @@ Detailed failover, partitioning, and observability topics are expanded in Chapte
 
 - [Redis data types](https://redis.io/docs/latest/develop/data-types/) — overview of native types, with links to deeper guides and command references.
 - [Bloom Filter and Cuckoo Filter](https://redis.io/docs/latest/develop/data-types/probabilistic/) - approximate membership data structures for space-efficient lookups.
+- [Probabilistic data types (HyperLogLog)](https://redis.io/docs/latest/develop/data-types/probabilistic/) — overview, commands, limits, and use cases aligned with the Redis documentation.  
+- [Redis new data structure: the HyperLogLog](https://antirez.com/news/75) — original write-up of the Redis implementation (error rate, 16k registers, merge, linear counting / bias correction, performance).
