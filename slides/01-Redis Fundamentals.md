@@ -23,7 +23,9 @@
   - [WATCH for optimistic concurrency](#watch-for-optimistic-concurrency)
 - [TTL, Expiration, and Eviction](#ttl-expiration-and-eviction)
   - [TTL and expiration](#ttl-and-expiration)
+  - [Worked example: TTL and key lifecycle](#worked-example-ttl-and-key-lifecycle)
   - [Eviction policies](#eviction-policies)
+  - [Worked example: eviction under a small `maxmemory`](#worked-example-eviction-under-a-small-maxmemory)
 - [Persistence Modes and Trade-offs](#persistence-modes-and-trade-offs)
 - [Deployment Models (Preview)](#deployment-models-preview)
   - [Single node](#single-node)
@@ -660,6 +662,43 @@ TTL defines the validity window of a key. This is critical for:
 
 Typical commands: `EXPIRE`, `TTL`, `SETEX`.
 
+### Worked example: TTL and key lifecycle
+
+```bash
+> SET session:abc "user=42"
+OK
+> EXPIRE session:abc 120        # expires in 120 seconds
+(integer) 1
+> TTL session:abc               # seconds remaining; -1 = no TTL; -2 = missing key
+(integer) 118
+> PTTL session:abc              # same idea in milliseconds
+(integer) 117834
+```
+
+Alternative one-step set + TTL:
+
+```bash
+> SETEX token:xyz 60 "opaque-token-string"
+OK
+> TTL token:xyz
+(integer) 59
+```
+
+Or the `SET` option form:
+
+```bash
+> SET cache:home "<html>...</html>" EX 10
+OK
+> TTL cache:home
+(integer) 9
+```
+
+**Lifecycle checks**
+
+- Run `TTL` / `PTTL` again after a few seconds—the countdown decreases toward `0`, then the key **disappears**; `TTL` on a missing key returns **`-2`**.
+- `PERSIST session:abc` removes the expiry (key stays until deleted manually).
+- `EXPIREAT` sets expiry at a **Unix timestamp** instead of a relative offset—useful when the business rule is “valid until 17:00 UTC”, not “valid for 300 seconds”.
+
 ### Eviction policies
 
 When memory is constrained, Redis applies the configured eviction policy. Common policies include:
@@ -672,6 +711,46 @@ When memory is constrained, Redis applies the configured eviction policy. Common
 - `volatile-lfu`
 
 * **LRU vs LFU (same `allkeys` / `volatile` split):** `*-lru` favors **recency** (“not used lately”); `*-lfu` favors **sustained traffic** (“rarely used overall”). Both are **approximate** in Redis for speed and memory.
+
+### Worked example: eviction under a small `maxmemory`
+
+Run this only on a **local / disposable** Redis (Docker or dev instance). You temporarily cap memory and force Redis to **drop keys** to stay under the limit.
+
+1. **Snapshot current settings** (so you can restore them):
+
+   ```bash
+   > CONFIG GET maxmemory
+   > CONFIG GET maxmemory-policy
+   ```
+
+2. **Enable a tiny budget and an eviction policy** (here: ~2 MiB, evict from all keys by approximate LRU):
+
+   ```bash
+   > CONFIG SET maxmemory 2097152
+   OK
+   > CONFIG SET maxmemory-policy allkeys-lru
+   OK
+   ```
+
+3. **Fill memory** with many string keys in one go (Lua loop—no shell script required). Values are a few hundred bytes each so total size quickly exceeds `maxmemory`:
+
+   ```bash
+   > EVAL "for i=1,12000 do redis.call('SET','labfill:'..i, string.rep('x', 400)) end return redis.call('DBSIZE')" 0
+   (integer) 12000
+   ```
+
+4. **Observe eviction**: `DBSIZE` may be **below** the number of `SET`s you attempted—Redis evicted older keys to stay under the cap. Sample some keys:
+
+   ```bash
+   > DBSIZE
+   (integer) 8234
+   > EXISTS labfill:1
+   (integer) 0        # may be 0 if that key was evicted (example outcome)
+   > SET labfill:new "still room for writes"
+   OK
+   ```
+
+   Under `allkeys-lru`, **reads and writes to hot keys** tend to survive longer; **cold** `labfill:*` keys are typical eviction victims—exact IDs vary because LRU is **sampled**, not a perfect global ranking.
 
 Architectural implication: eviction strategy must match business semantics. For example, evicting session keys and evicting cache keys have very different consequences.
 
@@ -730,8 +809,7 @@ Redis supports different durability profiles:
 
 ### Sentinel
 
-- Best for high availability in a Redis deployment. It automatically handles failover, monitoring, and notification. Use when you need automatic recovery in case of 
-node failures.
+- Best for high availability in a Redis deployment. It automatically handles failover, monitoring, and notification. Use when you need automatic recovery in case of node failures.
 
 ![](./images/redis-sentinel.png)
 
@@ -746,8 +824,7 @@ node failures.
 
 ### Cluster
 
-- Redis Cluster is a distributed implementation of Redis that allows you to scale your Redis infrastructure horizontally across multiple nodes. It provides high 
-availability and automatic partitioning of data across the cluster, ensuring fault tolerance and improved performance.
+- Redis Cluster is a distributed implementation of Redis that allows you to scale your Redis infrastructure horizontally across multiple nodes. It provides high availability and automatic partitioning of data across the cluster, ensuring fault tolerance and improved performance.
 
 - **Data distribution** — Each key maps to a slot and thus to a master; a large working set is **split across machines** (e.g. ~100 GB might live as ~30 GB + ~40 GB + ~30 GB on three masters instead of one 100 GB host).
 - **Scalability & throughput** — Adding shards/nodes increases **combined** capacity and **parallelism**; **write load** is spread across masters, each serving writes for its slot range.
