@@ -27,7 +27,7 @@
 - [Persistence Modes and Trade-offs](#persistence-modes-and-trade-offs)
 - [Deployment Models (Preview)](#deployment-models-preview)
   - [Single node](#single-node)
-  - [Replication](#replication)
+  - [Redis Replication](#redis-replication)
   - [Sentinel](#sentinel)
   - [Cluster](#cluster)
 - [Key Takeaways](#key-takeaways)
@@ -560,7 +560,7 @@ XADD mystream IDMPAUTO producer-2 * field value        # producer-2 (pid) is pro
 
 - HyperLogLog (HLL) estimates the **cardinality** of a set: “**about how many distinct elements** have I seen?” It **trades exact counts for bounded memory**: counting uniques with a normal `SET` grows roughly with the number of distinct values you must remember; an HLL keeps a **small fixed sketch** instead of the elements themselves.
 
-**Redis in practice (from the official description)**  
+**Redis in practice**  
 
 - The Redis implementation uses **up to about 12 KB per key** and targets a **standard error near 0.81%**
 
@@ -605,7 +605,8 @@ If you need **membership tests**, iteration, or **exact** counts, use a **`SET`*
 
 ### Single-command atomicity
 
-Every Redis command executes atomically. This is often enough for counters and many update patterns.
+* Every Redis command executes atomically. This is often enough for counters and many update patterns.
+* All the commands in a transaction are serialized and executed sequentially. A request sent by another client will never be served in the middle of the execution of a Redis Transaction.
 
 ### MULTI / EXEC transactions
 
@@ -622,7 +623,30 @@ EXEC
 
 `WATCH` can protect read-modify-write flows from concurrent updates. If watched keys change before `EXEC`, the transaction is aborted.
 
-Important clarification for students: Redis transactions are not equivalent to full ACID relational transactions with rollback semantics across arbitrary failure modes.
+**Race without `WATCH` (why read–modify–write is unsafe alone)**  
+
+Imagine emulating `INCR` when it did not exist: read, add one, write back.
+
+```bash
+GET mykey       # both clients see 10
+# locally: val = 10 + 1 → 11
+SET mykey 11    # both write 11
+```
+
+Two concurrent clients both read `10`, both compute `11`, both `SET` — the final value is **11** instead of **12**; one increment is lost (**last writer wins**).
+
+**Same logic with `WATCH`**  
+
+```bash
+WATCH mykey
+GET mykey       # 10
+# application: val = 10 + 1
+MULTI
+SET mykey 11    # queued, not executed yet
+EXEC            # runs the queue only if mykey unchanged since WATCH
+```
+
+If another client updates `mykey` between your `WATCH` and `EXEC`, **`EXEC` fails** (null reply) and nothing from that `MULTI` block is applied. You retry from `WATCH` with a fresh read—so you only commit when the value you read is still valid at commit time.
 
 ## TTL, Expiration, and Eviction
 
@@ -640,10 +664,14 @@ Typical commands: `EXPIRE`, `TTL`, `SETEX`.
 
 When memory is constrained, Redis applies the configured eviction policy. Common policies include:
 
-- `noeviction`,
-- `allkeys-lru`,
-- `volatile-lru`,
-- `allkeys-random`.
+- `noeviction`
+- `allkeys-lru`
+- `volatile-lru`
+- `allkeys-random`
+- `allkeys-lfu`
+- `volatile-lfu`
+
+* **LRU vs LFU (same `allkeys` / `volatile` split):** `*-lru` favors **recency** (“not used lately”); `*-lfu` favors **sustained traffic** (“rarely used overall”). Both are **approximate** in Redis for speed and memory.
 
 Architectural implication: eviction strategy must match business semantics. For example, evicting session keys and evicting cache keys have very different consequences.
 
@@ -651,12 +679,33 @@ Architectural implication: eviction strategy must match business semantics. For 
 
 Redis supports different durability profiles:
 
-- **No persistence**: best performance, data lost on restart.
-- **RDB snapshots**: periodic point-in-time dumps, fast restart, possible data loss between snapshots.
-- **AOF**: append write operations for stronger durability, higher I/O overhead.
-- **Hybrid (RDB + AOF)**: combines faster recovery with improved durability in many production setups.
+1. **No Persistence**
 
-Selection depends on Recovery Point Objective (RPO), Recovery Time Objective (RTO), and workload characteristics.
+  * **Description:** Memory only; data lost on restart.
+  * **Use case:** Temporary caching, speed-critical tasks.
+  * **Pros:** Best performance.
+  * **Cons:** Data lost on restart.
+
+2. **RDB (Snapshots)**
+
+  * **Description:** Saves periodic snapshots of data.
+  * **Use case:** Occasional persistence, analytics.
+  * **Pros:** Fast restart, low overhead.
+  * **Cons:** Can lose data between snapshots.
+
+3. **AOF (Append-Only File)**
+
+  * **Description:** Logs every write operation.
+  * **Use case:** High durability needed, e.g., e-commerce.
+  * **Pros:** Safe, configurable. Stronger durability.
+  * **Cons:** Slower, uses more disk. Higher I/O overhead.
+
+4. **Hybrid (RDB + AOF)**
+
+  * **Description:** Combines snapshots + logs.
+  * **Use case:** Large apps needing fast recovery + durability.
+  * **Pros:** Faster recovery with improved durability.
+  * **Cons:** Higher disk use, slight performance hit.
 
 ## Deployment Models (Preview)
 
@@ -666,20 +715,45 @@ Selection depends on Recovery Point Objective (RPO), Recovery Time Objective (RT
 - limited by one node's memory/CPU,
 - single point of failure.
 
-### Replication
+### Redis Replication
 
+* The master node handles writes, and replicas handle reads.
 - improves read scalability,
 - does not horizontally scale write throughput by itself.
 
+![](./images/redis-replication.png)
+
+- **Write Performance**: All write operations are still handled by the single master node, so there is no increase in the write throughput (writes per second).
+- **Data Distribution**: The data is not split across multiple nodes. Instead, the replica nodes maintain identical copies of the data from the master node. This means there is no increase in the total storage capacity.
+- **Failure Handling**: If the master node fails, all write operations will fail, and only read requests can be served by the replica nodes. However, these replica nodes will serve outdated data, as the latest writes will not be replicated during the failure. Therefore, the system's availability does not improve in case of a master node failure.
+- **Read Performance**: What improves with replication is the read capacity of the database. For example, if a single machine could handle 1,000 reads per second, with 4 nodes (1 master and 3 replicas), the system can now handle approximately 4,000 reads per second.
+
 ### Sentinel
 
-- adds monitoring and automatic failover.
+- Best for high availability in a Redis deployment. It automatically handles failover, monitoring, and notification. Use when you need automatic recovery in case of 
+node failures.
+
+![](./images/redis-sentinel.png)
+
+
+* **Monitoring** — Sentinel checks masters and replicas against configured health rules and classifies instances as up or failing.
+
+* **Notification** — When something looks wrong, Sentinel can alert operators or automation (scripts, other programs) so failures are not silent.
+
+* **Automatic failover** — If the master is deemed down, Sentinel runs a controlled promotion: a replica becomes the new master, other replicas are re-pointed to it, and the new address is published so clients can reconnect to the correct writer.
+
+* **Configuration / service discovery** — Clients connect to Sentinels to resolve the **current** master for a logical service name instead of hard-coding one IP forever; after failover, Sentinels answer with the **new** master address.
 
 ### Cluster
 
-- shards data across nodes for horizontal scalability and higher aggregate throughput.
+- Redis Cluster is a distributed implementation of Redis that allows you to scale your Redis infrastructure horizontally across multiple nodes. It provides high 
+availability and automatic partitioning of data across the cluster, ensuring fault tolerance and improved performance.
 
-Detailed failover, partitioning, and observability topics are expanded in Chapter 5.
+- **Data distribution** — Each key maps to a slot and thus to a master; a large working set is **split across machines** (e.g. ~100 GB might live as ~30 GB + ~40 GB + ~30 GB on three masters instead of one 100 GB host).
+- **Scalability & throughput** — Adding shards/nodes increases **combined** capacity and **parallelism**; **write load** is spread across masters, each serving writes for its slot range.
+- **High availability** — If a shard’s **master** fails, a **replica** can be **promoted** so that slot range stays available; the cluster maintains topology and continues serving under its quorum rules.
+
+![](./images/redis-cluster.png)
 
 ## Key Takeaways
 
@@ -695,3 +769,4 @@ Detailed failover, partitioning, and observability topics are expanded in Chapte
 - [Bloom Filter and Cuckoo Filter](https://redis.io/docs/latest/develop/data-types/probabilistic/) - approximate membership data structures for space-efficient lookups.
 - [Probabilistic data types (HyperLogLog)](https://redis.io/docs/latest/develop/data-types/probabilistic/) — overview, commands, limits, and use cases aligned with the Redis documentation.  
 - [Redis new data structure: the HyperLogLog](https://antirez.com/news/75) — original write-up of the Redis implementation (error rate, 16k registers, merge, linear counting / bias correction, performance).
+- [Redis Cluster](https://medium.com/@rajatpachauri12345/what-are-redis-cluster-and-how-to-setup-redis-cluster-locally-69e87941d573) - What is Redis Cluster
