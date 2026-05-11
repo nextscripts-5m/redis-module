@@ -53,6 +53,8 @@ The key design question is not only "Can Redis store this data?" but "Which cons
 
 Redis is an in-memory data store using an event-driven model. Commands are processed with single-threaded execution semantics for the command path, which provides a very useful property: each command is atomic at the server level.
 
+![](./images/event-loop.png)
+
 ### Why this matters
 
 - No per-command locking complexity for clients.
@@ -108,10 +110,10 @@ Redis stores key-value pairs, where the value can be a rich native type. Choosin
 To interact directly with the Redis server, we can use Docker:
 
 ```bash
-docker run --detach --name redis -p 6379:6379 redis:latest
+> docker run --detach --name redis -p 6379:6379 redis:latest
 
 # check if it's running
-docker ps
+> docker ps
 ```
 
 ```yaml
@@ -132,13 +134,13 @@ With Compose, run `docker compose up -d` from the directory that contains this f
 We can then install a Redis client on the host, connect:
 
 ```bash
-redis-cli
+> redis-cli
 ```
 
 If you do **not** have `redis-cli` installed locally, open the client inside the container (matches `docker run --name redis` above):
 
 ```bash
-docker exec -it redis redis-cli
+> docker exec -it redis redis-cli
 ```
 
 and interact:
@@ -254,7 +256,7 @@ HGETALL user:123
 
 - Redis lists are implemented via Linked Lists
 
-- Best for ordered sequences and simple queue patterns.
+- Best for ordered sequences and simple queue patterns. For example:
   - Remember the latest updates posted by users into a social network.
   - Communication between processes, using a consumer-producer pattern where the producer pushes items into a list, and a consumer (usually a *worker*) consumes those items and executes actions.
 - Consider [Redis streams](#stream) as an alternative to lists when you need to store and process an indeterminate series of events.
@@ -311,7 +313,7 @@ LRANGE bikes:repairs 0 -1
 
 ### Set
 
-- Best for uniqueness and membership checks.
+- Best for uniqueness and membership checks. For example:
   - Track unique items 
 - Sets membership checks on large datasets (or on streaming data) can use a lot of memory. If you're concerned about memory usage and don't need perfect precision, consider a [Bloom filter](#bloom-filter) as an alternative to a set.
 - Typical commands: `SADD`, `SMEMBERS`, `SISMEMBER`, `SCARD`.
@@ -389,7 +391,7 @@ SCARD SocialMedia
 **Performance**
 
 * Insertion in a Bloom filter is `O(K)`, where `k` is the number of hash functions.
-* Checking for an item is `O(K)` or `O(K*n)` for stacked filters, where n is the number of stacked filters.
+* Checking for an item is `O(K)` or `O(K*n)` for stacked filters, where `n` is the number of stacked filters.
 
 **Try it out!**
 
@@ -399,6 +401,8 @@ SCARD SocialMedia
 Example session:
 
 ```text
+BF.RESERVE <key> <error_rate> <capacity>
+
 BF.RESERVE usernames 0.01 100000
 OK
 BF.ADD usernames alice
@@ -415,12 +419,13 @@ BF.MADD usernames bob carol
 ```
 
 * `BF.EXISTS` can still report **false positives** (rare if the filter is sized well); there are **no false negatives** for items you have successfully added.
+  * you can try to increase *error_rate* for see how many false positives you have
 
 ### Sorted Set
 
 - When fast access to the middle of a large collection of elements is important, we use Sorted Sets
-- Best for ranking, scoreboards, and priority-like retrieval.
-  - Leaderboards. For example, you can use sorted sets to easily maintain ordered lists of the highest scores in a massive online game.
+- Best for ranking, scoreboards, and priority-like retrieval. For example:
+  - Leaderboards. You can use sorted sets to easily maintain ordered lists of the highest scores in a massive online game.
   - Rate limiters. In particular, you can use a sorted set to build a sliding-window rate limiter to prevent excessive API requests.
 - Typical commands: `ZADD`, `ZRANGE`, `ZREVRANGE`.
 
@@ -429,6 +434,8 @@ BF.MADD usernames bob carol
   * If B and A have exactly the same score, then A > B if the A string is lexicographically greater than the B string. B and A strings can't be equal since sorted sets only have unique elements.
 
 ```bash
+ZADD <key> <score> <member> [<score> <member>]
+
 > ZADD racer_scores 10 "Norem"
 (integer) 1
 > ZADD racer_scores 12 "Castilla"
@@ -440,6 +447,7 @@ BF.MADD usernames bob carol
 # 0: first element
 # -1: last element
 # use ZREVRANGE for descending order
+# (ZRANGE <key> <start> <stop>)
 > ZRANGE racer_scores 0 -1
 1) "Ford"
 2) "Sam-Bodden"
@@ -456,7 +464,8 @@ BF.MADD usernames bob carol
   - Event sourcing (e.g., tracking user actions, clicks, etc.)
   - Sensor monitoring (e.g., readings from devices in the field)
   - Notifications (e.g., storing a record of each user's notifications in a separate stream)
-- Typical commands: `XADD`, `XREADGROUP`, `XACK`.
+- Typical commands: `XADD`, `XRANGE`, `XREAD`, `XREADGROUP`, `XACK`.
+
 
 ```bash
 # with "*" we want the server to generate the entry ID
@@ -481,6 +490,56 @@ BF.MADD usernames bob carol
 > XLEN race:france
 (integer) 3
 ```
+
+* **`XREAD`** reads by *last seen* stream ID (per stream). It does **not** create consumer-group delivery state: repeating the same IDs returns the same slice of the log. Use **`0-0`** as a “start from the beginning” sentinel (return entries with IDs strictly after `0-0`). 
+  * **`$`** means “only entries **newer than the stream tail at the time this command runs**”.
+
+* **`XREADGROUP`** is for **consumer groups**: each group has its own cursor and **PEL** (pending list). You must **`XGROUP CREATE`** first. 
+  * **`>`** means “entries **not yet delivered to this group**” (not a global lock: another group on the same key can still read the same entries with its own `>`). 
+  * **`XREADGROUP` never ACKs**—delivered entries stay **pending** for that consumer until **`XACK`** (at-least-once processing). After **`XACK`**, the group is done with those IDs, but rows remain in the stream until you **`XTRIM`** / **`XDEL`** / drop the key ( **`XRANGE`** still shows them).
+
+* **`XGROUP CREATE`** (once per stream + group name):
+  * **`0-0`** exposes existing backlog to **`>`**; 
+  * **`$`** would start the group at the **current end** so **`>`** only sees **future** `XADD`s (no backlog for that group).
+
+```bash
+# XREAD: from the beginning (use 0-0), at most COUNT entries per stream
+> XREAD COUNT 10 STREAMS race:france 0-0
+1) 1) "race:france"
+   2) 1) 1) "1778238161339-0"
+         2) 1) "rider"
+            2) "Castilla"
+            3) "speed"
+            4) "30.2"
+            ...
+      2) 1) "1778238177018-0"
+         ...
+      3) 1) "1778238185041-0"
+         ...
+
+# Blocking tail: only messages appended after this instant (max wait 5s)
+> XREAD BLOCK 5000 STREAMS race:france $
+
+# Consumer group: one-time create; 0-0 = existing entries eligible for ">"
+> XGROUP CREATE race:france riders 0-0
+OK
+
+# Assign up to COUNT entries to this consumer; they are pending until XACK
+> XREADGROUP GROUP riders consumer-name COUNT 2 STREAMS race:france >
+1) 1) "race:france"
+   2) 1) 1) "1778238161339-0"
+         2) 1) "rider"
+            2) "Castilla"
+            ...
+      2) 1) "1778238177018-0"
+         ...
+
+> XACK race:france riders 1778238161339-0 1778238177018-0
+(integer) 2
+# Another XREADGROUP ... > would return the next undelivered-for-group entry (e.g. 1778238185041-0), then (nil) until new XADDs
+```
+
+![](./images/redis-stream-example.png)
 
 #### Idempotation
 
