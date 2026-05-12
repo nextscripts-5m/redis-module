@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 3s
+  evaluation_interval: 3s
+
+scrape_configs:
+  - job_name: cache-with-redis
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - cache-lab-with:8080
+
+  - job_name: cache-nocache
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - cache-lab-nocache:8080

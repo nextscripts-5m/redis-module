@@ -1,6 +1,20 @@
 # Lab: Chapter 2 — Redis caching with Spring (`redis-cache`)
 
-## 1. Run everything with Docker
+Default Docker stack: **two app instances in parallel** (same artifact, different profiles), **Redis**, **Prometheus**, and **Grafana**.
+
+
+| Compose service     | Host port | Role                                                                                       |
+| ------------------- | --------- | ------------------------------------------------------------------------------------------ |
+| `cache-lab-with`    | **8080**  | Spring Cache + Redis (`cache-aside`, eviction). Use this for README §2 (GET/PUT/DELETE).   |
+| `cache-lab-nocache` | **8081**  | `nocache` profile: no cache, no Redis. Reads / benchmarks only, for latency comparison.    |
+| `redis`             | 6379      | Cache backend for the `:8080` instance only.                                               |
+| `prometheus`        | 9090      | Scrapes `/actuator/prometheus` on both apps (jobs `cache-with-redis` and `cache-nocache`). |
+| `grafana`           | 3000      | Pre-provisioned dashboard (anonymous Admin access for the demo).                           |
+
+
+---
+
+## 1. Run with Docker
 
 From `labs/redis-cache/`:
 
@@ -8,31 +22,31 @@ From `labs/redis-cache/`:
 docker compose up --build -d
 docker compose ps
 curl -s http://localhost:8080/api/lab/info
+curl -s http://localhost:8081/api/lab/info
 ```
 
-**Simulated DB delay** (milliseconds, default **80** in `application.yaml`) can be overridden from the host without editing files:
+**Simulated DB delay** (milliseconds, default **80** in `application.yaml`), the same for both instances:
 
 ```bash
 APP_SIMULATED_DB_DELAY_MS=150 docker compose up --build -d
 ```
 
-**Run with cache disabled** (A/B demo: no Redis cache):
-
-```bash
-SPRING_PROFILES_ACTIVE=nocache docker compose up --build -d
-```
-
-**Cold cache** (flush Redis while the stack is running):
+**Cold cache** (Redis-backed instance on `:8080` only):
 
 ```bash
 docker compose exec redis redis-cli FLUSHDB
 ```
 
+**Observability**
+
+- Prometheus: [http://localhost:9090](http://localhost:9090) → *Status → Targets* (check `cache-with-redis` and `cache-nocache`).
+- Grafana: [http://localhost:3000](http://localhost:3000) → *Dashboards* menu → **Redis cache lab — HTTP latency** (p95 and mean latency for `/api/articles/`* requests).
+
 ---
 
-## 2. Exercise the API (from the host)
+## 2. Exercise the API (cached instance only)
 
-Articles are seeded with ids **1**, **2**, and **3** (see `src/main/resources/data.sql`).
+Seeded articles use ids **1**, **2**, and **3** (see `src/main/resources/data.sql`). **Always use port 8080** for PUT/DELETE so Redis and H2 stay aligned with this README.
 
 ```bash
 # read
@@ -43,48 +57,35 @@ curl -s -X PUT http://localhost:8080/api/articles/1 \
   -H 'Content-Type: application/json' \
   -d '{"title":"Alpha (updated)","content":"new body"}' | jq .
 
-# delete (evicts then removes row)
+# delete (evict then remove row)
 curl -s -X DELETE http://localhost:8080/api/articles/3 -w "\nHTTP %{http_code}\n"
 ```
 
-After `PUT`/`DELETE`, the **next** `GET` for that id is slow again on a cache miss, then fast on repeated GETs when caching is enabled.
+After `PUT`/`DELETE`, the **next** `GET` for that id is slow again (miss), then fast on repeated GETs while caching is enabled.
 
 ---
 
-## 3. Classroom benchmark (Docker only)
+## 3. Parallel benchmark (Docker)
 
-All traffic still goes to **[http://localhost:8080](http://localhost:8080)** on the host; only the **app container** profile changes.
-
-**Round A — no cache**
+Generate traffic on **both** ports, then inspect the charts in Grafana (last 15 minutes, 5s refresh).
 
 ```bash
-docker compose down
-SPRING_PROFILES_ACTIVE=nocache docker compose up --build -d
 ./scripts/bench-reads.sh http://localhost:8080 30
+./scripts/bench-reads.sh http://localhost:8081 30
 ```
 
-Expect **every** line near `APP_SIMULATED_DB_DELAY_MS` / default delay plus overhead.
+On **8080** expect the first request slow and the following ones much faster (until TTL, eviction, or a write). On **8081** each line stays near `APP_SIMULATED_DB_DELAY_MS` plus overhead.
 
-**Round B — Redis cache**
+### Optional load with `hey`
 
-```bash
-docker compose down
-docker compose up --build -d
-docker compose exec redis redis-cli FLUSHDB
-./scripts/bench-reads.sh http://localhost:8080 30
-```
-
-Expect the **first** request slow, the **rest** much faster (until TTL, eviction, or a write invalidates the key).
-
-### Optional: heavier load
-
-If you have [hey](https://github.com/rakyll/hey) on the host:
+If you have [hey](https://github.com/rakyll/hey):
 
 ```bash
 hey -n 200 -c 10 http://localhost:8080/api/articles/1
+hey -n 200 -c 10 http://localhost:8081/api/articles/1
 ```
 
-Compare requests/sec and latency between round A and round B.
+Compare requests/sec and latency with the Prometheus/Grafana panels.
 
 ---
 

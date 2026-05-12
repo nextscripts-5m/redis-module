@@ -9,16 +9,66 @@ services:
       timeout: 2s
       retries: 20
 
-  cache-lab:
+  # Spring Cache + Redis (port 8080). Use this instance for README §2 (PUT/DELETE eviction).
+  cache-lab-with:
     build: .
     ports:
       - "8080:8080"
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      # Optional on host: nocache for A/B demo; APP_SIMULATED_DB_DELAY_MS overrides artificial DB latency (ms)
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-}
       APP_SIMULATED_DB_DELAY_MS: ${APP_SIMULATED_DB_DELAY_MS:-80}
     depends_on:
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  # Same app, profile nocache (no Redis, no Spring cache). Read-heavy / benchmark on :8081 only.
+  cache-lab-nocache:
+    build: .
+    ports:
+      - "8081:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: nocache
+      APP_SIMULATED_DB_DELAY_MS: ${APP_SIMULATED_DB_DELAY_MS:-80}
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    depends_on:
+      cache-lab-with:
+        condition: service_healthy
+      cache-lab-nocache:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

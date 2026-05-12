@@ -8,6 +8,7 @@ RUN mvn -q -DskipTests package \
     && cp target/cache-lab.jar target/application.jar
 
 FROM eclipse-temurin:21-jre-alpine
+RUN apk add --no-cache curl
 WORKDIR /app
 COPY --from=build /workspace/target/application.jar /app/application.jar
 EXPOSE 8080
