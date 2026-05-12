@@ -13,7 +13,6 @@
   - [`@Cacheable`](#cacheable)
   - [`@CacheEvict`](#cacheevict)
   - [`@CachePut`](#cacheput)
-- [Lab Outline](#lab-outline)
 - [Reference](#reference)
 
 
@@ -232,17 +231,6 @@ Use `allEntries = true` sparingly: it is a blunt instrument and can cause **thun
 ### `@CachePut`
 
 Always runs the method and **puts** the result into the cache. Useful when the method returns the **new** canonical representation after a write.
-
----
-
-## Lab Outline
-
-Aligned with the incremental module plan:
-
-1. Add **`spring-boot-starter-data-redis`** and verify connectivity (local Docker Compose from Chapter 1 is sufficient).
-2. Implement **cache-aside** behavior on selected **GET** endpoints using `@Cacheable` (or explicit repository + template if you want lower-level control).
-3. Add **explicit invalidation** on **update/delete** flows with `@CacheEvict` (and confirm no stale reads on a simple integration test or manual checklist).
-4. **Benchmark** with and without the cache (latency percentiles and throughput). Capture numbers for your report: even a simple `wrk` or JMeter run on one endpoint is enough to show a measurable gain when the backing query is non-trivial.
 
 ---
 
