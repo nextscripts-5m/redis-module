@@ -1,8 +1,6 @@
 # Chapter 02 - cache
 
-* add some details to lab
-  * add prometheus
-  * add grafana
+* test lab
 
 # Chapter 03 — streams / consumption
 
