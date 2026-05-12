@@ -693,12 +693,6 @@ OK
 (integer) 9
 ```
 
-**Lifecycle checks**
-
-- Run `TTL` / `PTTL` again after a few seconds—the countdown decreases toward `0`, then the key **disappears**; `TTL` on a missing key returns **`-2`**.
-- `PERSIST session:abc` removes the expiry (key stays until deleted manually).
-- `EXPIREAT` sets expiry at a **Unix timestamp** instead of a relative offset—useful when the business rule is “valid until 17:00 UTC”, not “valid for 300 seconds”.
-
 ### Eviction policies
 
 When memory is constrained, Redis applies the configured eviction policy. Common policies include:
