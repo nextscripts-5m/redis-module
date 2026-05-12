@@ -1,6 +1,6 @@
 # Chapter 02 - cache
 
-* test lab
+* try to figure it out how to see bettere graphs with grafana (low prio)
 
 # Chapter 03 — streams / consumption
 
