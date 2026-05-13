@@ -1,7 +1,8 @@
 # Chapter 02 - cache
 
-* try to figure it out how to see bettere graphs with grafana (low prio)
+* Maybe change the example with something nicer (check with professor)
 
-# Chapter 03 — streams / consumption
+# Chapter 03 - pub/sub and streams
 
-* For chapter 03, read [this](https://redis.io/docs/latest/develop/data-types/streams/#listening-for-new-items-with-xread)
+* read [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/) for checking if something else can be added
+* add lab, maybe consider also examples introduced into theory 
