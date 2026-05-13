@@ -1,6 +1,6 @@
 # Lab: Chapter 2 — Redis caching with Spring (`redis-cache`)
 
-Default Docker stack: **two app instances in parallel** (same artifact, different profiles), **Redis**, **Prometheus**, and **Grafana**.
+Default Docker stack: **two app instances in parallel** (same artifact, different profiles), **Redis**, **Prometheus**, **Grafana**, and **Jaeger**.
 
 
 | Compose service     | Host port | Role                                                                                       |
@@ -10,6 +10,7 @@ Default Docker stack: **two app instances in parallel** (same artifact, differen
 | `redis`             | 6379      | Cache backend for the `:8080` instance only.                                               |
 | `prometheus`        | 9090      | Scrapes `/actuator/prometheus` on both apps (jobs `cache-with-redis` and `cache-nocache`). |
 | `grafana`           | 3000      | Pre-provisioned dashboard (anonymous Admin access for the demo).                           |
+| `jaeger`            | 16686     | Trace UI. Both app instances export OTLP traces to Jaeger.                                 |
 
 
 ---
@@ -40,7 +41,8 @@ docker compose exec redis redis-cli FLUSHDB
 **Observability**
 
 - Prometheus: [http://localhost:9090](http://localhost:9090) → *Status → Targets* (check `cache-with-redis` and `cache-nocache`).
-- Grafana: [http://localhost:3000](http://localhost:3000) → *Dashboards* menu → **Redis cache lab — HTTP latency** (p95 and mean latency for `/api/articles/`* requests).
+- Grafana: [http://localhost:3000](http://localhost:3000) → *Dashboards* menu → **Redis cache lab — HTTP latency** (p95 and mean latency for `/api/articles/*` requests).
+- Jaeger: [http://localhost:16686](http://localhost:16686) → select service `redis-cache-lab`, then search traces after sending some API traffic.
 
 ---
 

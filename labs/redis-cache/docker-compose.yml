@@ -9,6 +9,15 @@ services:
       timeout: 2s
       retries: 20
 
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
   # Spring Cache + Redis (port 8080). Use this instance for README §2 (PUT/DELETE eviction).
   cache-lab-with:
     build: .
@@ -18,9 +27,12 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       APP_SIMULATED_DB_DELAY_MS: ${APP_SIMULATED_DB_DELAY_MS:-80}
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
     depends_on:
       redis:
         condition: service_healthy
+      jaeger:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
       interval: 5s
@@ -36,6 +48,10 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: nocache
       APP_SIMULATED_DB_DELAY_MS: ${APP_SIMULATED_DB_DELAY_MS:-80}
+      OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
+    depends_on:
+      jaeger:
+        condition: service_started
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
       interval: 5s
