@@ -15,6 +15,13 @@
     - [Group cursor, consumers, and pending entries](#group-cursor-consumers-and-pending-entries)
     - [Acknowledgment flow](#acknowledgment-flow)
     - [Recovering stuck messages](#recovering-stuck-messages)
+  - [Ordering, Sharding, and Scaling](#ordering-sharding-and-scaling)
+    - [Ordering by business key](#ordering-by-business-key)
+    - [Backpressure and lag](#backpressure-and-lag)
+  - [Reliability Patterns](#reliability-patterns)
+    - [Producer reliability and the outbox pattern](#producer-reliability-and-the-outbox-pattern)
+    - [Poison messages and dead-letter streams](#poison-messages-and-dead-letter-streams)
+    - [Durability depends on Redis configuration](#durability-depends-on-redis-configuration)
   - [Delivery Semantics](#delivery-semantics)
   - [Redis Streams vs Dedicated Brokers](#redis-streams-vs-dedicated-brokers)
   - [Design Guidelines](#design-guidelines)
@@ -422,6 +429,161 @@ This is the core recovery mechanism for worker crashes. It also explains why con
 
 ---
 
+## Ordering, Sharding, and Scaling
+
+Consumer groups are a server-side load balancing mechanism. They do not behave like Kafka partitions.
+
+With one stream and multiple consumers in the same group, Redis preserves the stream insertion order, but different entries may be processed by different workers at different speeds.
+
+```text
+stream: order-events
+group: billing
+
+entry 1: order-created orderId=42  -> billing-worker-1
+entry 2: order-paid    orderId=42  -> billing-worker-2
+```
+
+If `billing-worker-2` is faster than `billing-worker-1`, the payment side effect may complete before the creation side effect. This is acceptable for independent jobs, but it is dangerous when events for the same business entity must be processed in order.
+
+### Ordering by business key
+
+When ordering matters for a key such as `orderId`, `userId`, or `accountId`, route all events for the same key to the same stream shard.
+
+```text
+shard = hash(orderId) % 4
+
+orderId=42 -> orders:2
+orderId=43 -> orders:3
+orderId=44 -> orders:0
+```
+
+The producer appends each event to the selected stream:
+
+```bash
+> XADD orders:2 * type order-created orderId 42 amount 49.90
+> XADD orders:2 * type order-paid orderId 42 paymentId pay_987
+> XADD orders:2 * type order-ready-to-ship orderId 42 warehouse EU-1
+```
+
+Then workers can be assigned by shard:
+
+```text
+worker-a -> orders:0
+worker-b -> orders:1
+worker-c -> orders:2
+worker-d -> orders:3
+```
+
+In this model, events for the same order stay ordered because they are read from the same stream by the same processing lane. Different orders can still be processed in parallel across different shards.
+
+This is the closest Redis Streams equivalent to Kafka partitioning, but the partitioning is application-defined. Redis will not automatically split one stream across multiple instances.
+
+Common options:
+
+| Model                                | Benefit                               | Trade-off                                      |
+| ------------------------------------ | ------------------------------------- | ---------------------------------------------- |
+| `1 stream -> 1 consumer`             | Total ordering                        | Limited throughput                             |
+| `1 stream -> N consumers`            | Simple load balancing                 | No processing-order guarantee per business key |
+| `N sharded streams -> N workers`     | Ordering per key and parallelism      | Requires explicit routing and shard ownership  |
+| `1 stream -> N consumers + locking`  | Keeps one stream                      | More coordination and failure complexity       |
+
+### Backpressure and lag
+
+Streams buffer messages when producers are faster than consumers. This is useful, but it also means the system needs lag and memory monitoring.
+
+Useful signals:
+
+```bash
+> XLEN order-events
+> XINFO GROUPS order-events
+> XINFO CONSUMERS order-events billing
+> XPENDING order-events billing
+```
+
+Operational questions:
+
+- Is the stream length growing faster than expected?
+- Are pending entries increasing?
+- Are some consumers idle or repeatedly claiming the same messages?
+- Does the retention policy still fit the current producer rate?
+
+If lag keeps growing, the team can scale consumers, increase the number of stream shards, reduce per-message work, slow producers, or move the workflow to a dedicated broker.
+
+---
+
+## Reliability Patterns
+
+Reliable stream processing is not only about `XREADGROUP` and `XACK`. Distributed systems also need a strategy for producer failures, permanently failing messages, and Redis durability.
+
+### Producer reliability and the outbox pattern
+
+A common failure is the dual write problem:
+
+```text
+1. Service writes order state to the database.
+2. Service publishes order-created to Redis Streams.
+```
+
+If the service crashes between step 1 and step 2, the database contains the order, but no event is published. If the event is published first and the database write fails, consumers may observe an event for state that does not exist.
+
+The usual solution is the **Transactional Outbox** pattern:
+
+```text
+same database transaction:
+  - save order state
+  - save event row into outbox table
+
+background publisher:
+  - reads unpublished outbox rows
+  - XADDs them to Redis Streams
+  - marks rows as published
+```
+
+This makes the database the source of truth for both state and the intent to publish. The publisher can retry safely, and consumers should still be idempotent because publication may happen more than once.
+
+### Poison messages and dead-letter streams
+
+Some messages will never succeed: malformed payloads, missing required data, unsupported schema versions, or business state that cannot be reconciled.
+
+If these messages are retried forever, they can waste capacity and hide real failures. A common pattern is a dead-letter stream:
+
+```text
+order-events -> billing group -> retry 3 times -> order-events:dlq
+```
+
+Example policy:
+
+```text
+if processing succeeds:
+  XACK original message
+
+if processing fails and retryCount < 3:
+  leave pending or requeue with retry metadata
+
+if processing fails too many times:
+  XADD order-events:dlq originalId ... error ...
+  XACK original message
+```
+
+The dead-letter stream should be monitored and reviewed. It is not a trash bin; it is an operational queue for messages that need investigation or manual repair.
+
+### Durability depends on Redis configuration
+
+Streams are persisted Redis data structures, but the durability guarantee depends on how Redis is deployed.
+
+Important production settings and risks:
+
+- persistence mode: RDB snapshots, AOF, or both;
+- AOF `appendfsync` policy: controls how often Redis forces stream writes to disk (`always`, `everysec`, or `no`);
+- replication and failover behavior;
+- Redis Cluster sharding strategy;
+- memory limits and eviction policy;
+- backup and restore procedures.
+
+For example, if Redis is configured with aggressive eviction or weak persistence, Streams should not be treated as a durable event backbone. Kafka or another dedicated broker is usually a better fit when events are a long-term source of truth shared by many teams.
+
+---
+
 ## Delivery Semantics
 
 Messaging systems are usually described with three delivery semantics:
@@ -493,6 +655,12 @@ Keep these rules in code reviews:
 - Every at-least-once consumer should be idempotent.
 - `XACK` should happen after the business side effect succeeds.
 - Stream entry fields should be stable and versionable enough for independent consumers.
+- Decide whether ordering is required, and by which business key.
+- Use sharded streams when ordering per key and parallelism are both required.
+- Define retry limits and a dead-letter stream for poison messages.
+- Monitor stream length, group lag, pending entries, and Redis memory.
+- Use the Transactional Outbox pattern when publishing events from database transactions.
+- Treat Redis persistence, replication, failover, and eviction policy as part of the messaging design.
 
 ---
 
