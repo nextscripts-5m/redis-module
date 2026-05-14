@@ -4,5 +4,4 @@
 
 # Chapter 03 - pub/sub and streams
 
-* check lab 01 with some probs of failing
-* continue implementing other labs
+* continue implementing lab-03

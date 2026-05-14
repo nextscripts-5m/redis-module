@@ -1,0 +1,22 @@
+global:
+  scrape_interval: 3s
+  evaluation_interval: 3s
+
+scrape_configs:
+  - job_name: stream-producer
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - order-producer-api:8080
+
+  - job_name: stream-reader
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - stream-reader:8080
+
+  - job_name: replay-reader
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - replay-reader:8080

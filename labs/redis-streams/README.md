@@ -2,16 +2,16 @@
 
 Labs for `slides/03-Redis Messaging Streams.md`.
 
-Each example lives in its own folder and is dockerized independently. The first implemented lab is:
+Each example lives in its own folder and is dockerized independently. Implemented labs:
 
 ```text
 01-pubsub-live-broadcast/
+02-stream-append-log/
 ```
 
 Planned labs:
 
 ```text
-02-stream-append-log/
 03-consumer-groups-worker-pool/
 04-ordering-sharded-streams/
 05-failure-recovery-dlq-observability/
