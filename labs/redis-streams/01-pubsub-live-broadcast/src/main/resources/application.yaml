@@ -1,0 +1,33 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: redis-pubsub-lab
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+app:
+  role: ${APP_ROLE:publisher}
+  channel: ${APP_CHANNEL:order-notifications}
+  publisher-name: ${APP_PUBLISHER_NAME:publisher-api}
+  subscriber-name: ${APP_SUBSCRIBER_NAME:subscriber-local}
+  failure-probability: ${APP_FAILURE_PROBABILITY:0.0}
+  processing-delay-ms: ${APP_PROCESSING_DELAY_MS:0}
+  recent-message-limit: ${APP_RECENT_MESSAGE_LIMIT:20}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true

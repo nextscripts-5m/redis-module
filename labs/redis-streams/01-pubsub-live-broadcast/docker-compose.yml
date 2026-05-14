@@ -1,0 +1,106 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  publisher-api:
+    build: .
+    ports:
+      - "18080:8080"
+    environment:
+      APP_ROLE: publisher
+      APP_PUBLISHER_NAME: publisher-api
+      APP_CHANNEL: order-notifications
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  subscriber-a:
+    build: .
+    ports:
+      - "18081:8080"
+    environment:
+      APP_ROLE: subscriber
+      APP_SUBSCRIBER_NAME: subscriber-a
+      APP_CHANNEL: order-notifications
+      APP_FAILURE_PROBABILITY: ${SUBSCRIBER_A_FAILURE_PROBABILITY:-0.0}
+      APP_PROCESSING_DELAY_MS: ${SUBSCRIBER_A_PROCESSING_DELAY_MS:-0}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  subscriber-b:
+    build: .
+    ports:
+      - "18082:8080"
+    environment:
+      APP_ROLE: subscriber
+      APP_SUBSCRIBER_NAME: subscriber-b
+      APP_CHANNEL: order-notifications
+      APP_FAILURE_PROBABILITY: ${SUBSCRIBER_B_FAILURE_PROBABILITY:-0.0}
+      APP_PROCESSING_DELAY_MS: ${SUBSCRIBER_B_PROCESSING_DELAY_MS:-0}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    depends_on:
+      publisher-api:
+        condition: service_healthy
+      subscriber-a:
+        condition: service_healthy
+      subscriber-b:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "3001:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

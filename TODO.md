@@ -4,4 +4,5 @@
 
 # Chapter 03 - pub/sub and streams
 
-* add lab, maybe consider also examples introduced into theory 
+* check lab 01 with some probs of failing
+* continue implementing other labs
