@@ -1,0 +1,133 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [{ "expr": "max(redis_stream_length)", "legendFormat": "main", "refId": "A" }],
+      "title": "Main stream length",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [{ "expr": "max(redis_stream_pending_total)", "legendFormat": "pending", "refId": "A" }],
+      "title": "PEL pending (group total)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [{ "expr": "max(redis_stream_dlq_length)", "legendFormat": "DLQ", "refId": "A" }],
+      "title": "DLQ stream length",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [{ "expr": "sum(redis_stream_messages_produced_total)", "legendFormat": "produced", "refId": "A" }],
+      "title": "Messages produced",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "id": 5,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        { "expr": "sum(rate(redis_stream_messages_processed_total[1m]))", "legendFormat": "processed/sec", "refId": "A" },
+        { "expr": "sum(rate(redis_stream_messages_failed_total[1m]))", "legendFormat": "payment failed/sec", "refId": "B" },
+        { "expr": "sum(rate(redis_stream_messages_acked_total[1m]))", "legendFormat": "acked/sec", "refId": "C" }
+      ],
+      "title": "Payment worker throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "id": 6,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        { "expr": "sum(rate(redis_stream_recovery_claimed_total[1m]))", "legendFormat": "claimed/sec", "refId": "A" },
+        { "expr": "sum(rate(redis_stream_recovery_succeeded_total[1m]))", "legendFormat": "recovery ok/sec", "refId": "B" },
+        { "expr": "sum(rate(redis_stream_recovery_failed_total[1m]))", "legendFormat": "recovery fail/sec", "refId": "C" },
+        { "expr": "sum(rate(redis_stream_recovery_dlq_moved_total[1m]))", "legendFormat": "DLQ moved/sec", "refId": "D" },
+        { "expr": "sum(rate(redis_stream_idempotent_skips_total[1m]))", "legendFormat": "idempotent skips/sec", "refId": "E" }
+      ],
+      "title": "Recovery and DLQ",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true } },
+      "targets": [
+        {
+          "expr": "1000 * sum(rate(redis_stream_processing_seconds_sum[1m])) by (consumer) / sum(rate(redis_stream_processing_seconds_count[1m])) by (consumer)",
+          "legendFormat": "{{consumer}} payment avg ms",
+          "refId": "A"
+        },
+        {
+          "expr": "1000 * sum(rate(redis_stream_recovery_processing_seconds_sum[1m])) by (consumer) / sum(rate(redis_stream_recovery_processing_seconds_count[1m])) by (consumer)",
+          "legendFormat": "{{consumer}} recovery avg ms",
+          "refId": "B"
+        }
+      ],
+      "title": "Processing latency (payment vs recovery)",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "5s",
+  "schemaVersion": 40,
+  "tags": ["redis", "streams", "dlq", "lab"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Redis Streams failure recovery DLQ lab",
+  "uid": "redis-failure-recovery-dlq-lab",
+  "version": 1,
+  "weekStart": ""
+}

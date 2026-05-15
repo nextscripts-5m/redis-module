@@ -9,11 +9,6 @@ Each example lives in its own folder and is dockerized independently. Implemente
 02-stream-append-log/
 03-consumer-groups-worker-pool/
 04-ordering-sharded-streams/
-```
-
-Planned labs:
-
-```text
 05-failure-recovery-dlq-observability/
 ```
 

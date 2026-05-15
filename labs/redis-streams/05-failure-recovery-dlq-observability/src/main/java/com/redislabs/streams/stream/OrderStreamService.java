@@ -1,0 +1,148 @@
+package com.redislabs.streams.stream;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.redislabs.streams.config.LabProperties;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.data.domain.Range;
+import org.springframework.data.redis.connection.Limit;
+import org.springframework.data.redis.connection.stream.MapRecord;
+import org.springframework.data.redis.connection.stream.RecordId;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+@Service
+public class OrderStreamService {
+
+    private static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
+    };
+
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
+    private final LabProperties properties;
+    private final Counter producedCounter;
+
+    public OrderStreamService(
+            StringRedisTemplate redisTemplate,
+            ObjectMapper objectMapper,
+            LabProperties properties,
+            MeterRegistry meterRegistry
+    ) {
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
+        this.properties = properties;
+        this.producedCounter = meterRegistry.counter(
+                "redis.stream.messages.produced",
+                "stream", properties.streamName(),
+                "producer", properties.producerName()
+        );
+    }
+
+    public StreamEvent append(OrderEventRequest request) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        fields.put("type", request.eventType());
+        fields.put("orderId", request.eventOrderId());
+        fields.put("producer", properties.producerName());
+        fields.put("createdAt", Instant.now().toString());
+        fields.put("payload", serialize(request.eventPayload()));
+
+        RecordId id = redisTemplate.opsForStream().add(properties.streamName(), fields);
+        producedCounter.increment();
+        return toEvent(id.getValue(), fields);
+    }
+
+    public List<StreamEvent> rangeMain(int count) {
+        return redisTemplate.opsForStream()
+                .range(properties.streamName(), Range.unbounded(), Limit.limit().count(Math.max(1, count)))
+                .stream()
+                .map(this::toEvent)
+                .toList();
+    }
+
+    public List<StreamEvent> rangeDlq(int count) {
+        return redisTemplate.opsForStream()
+                .range(properties.dlqStreamName(), Range.unbounded(), Limit.limit().count(Math.max(1, count)))
+                .stream()
+                .map(this::toEvent)
+                .toList();
+    }
+
+    public long clearMainStreamAndLabKeys() {
+        long deleted = Boolean.TRUE.equals(redisTemplate.delete(properties.streamName())) ? 1L : 0L;
+        redisTemplate.delete(properties.dlqStreamName());
+        Set<String> keys = redisTemplate.keys("lab05:*");
+        if (keys != null && !keys.isEmpty()) {
+            redisTemplate.delete(keys);
+        }
+        return deleted;
+    }
+
+    public long dlqLength() {
+        try {
+            Long size = redisTemplate.opsForStream().size(properties.dlqStreamName());
+            return size == null ? 0L : size;
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    public long mainStreamLength() {
+        try {
+            Long size = redisTemplate.opsForStream().size(properties.streamName());
+            return size == null ? 0L : size;
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    StreamEvent toEvent(MapRecord<String, Object, Object> record) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        record.getValue().forEach((k, v) -> fields.put(String.valueOf(k), String.valueOf(v)));
+        return toEvent(record.getId().getValue(), fields);
+    }
+
+    private StreamEvent toEvent(String id, Map<String, String> fields) {
+        return new StreamEvent(
+                id,
+                fields.getOrDefault("type", "(missing)"),
+                fields.getOrDefault("orderId", "(missing)"),
+                fields.getOrDefault("producer", "(missing)"),
+                parseInstant(fields.get("createdAt")),
+                deserialize(fields.get("payload"))
+        );
+    }
+
+    private String serialize(Map<String, Object> payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("Could not serialize payload", ex);
+        }
+    }
+
+    private Map<String, Object> deserialize(String payload) {
+        if (payload == null || payload.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(payload, PAYLOAD_TYPE);
+        } catch (JsonProcessingException ex) {
+            return Map.of("raw", payload);
+        }
+    }
+
+    private Instant parseInstant(String value) {
+        if (value == null || value.isBlank()) {
+            return Instant.EPOCH;
+        }
+        return Instant.parse(value);
+    }
+}

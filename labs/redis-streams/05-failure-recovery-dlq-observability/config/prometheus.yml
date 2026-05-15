@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 3s
+  evaluation_interval: 3s
+
+scrape_configs:
+  - job_name: lab05-producer
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - producer-api:8080
+
+  - job_name: lab05-payment-worker
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - payment-worker:8080
+
+  - job_name: lab05-recovery-worker
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - recovery-worker:8080
+
+  - job_name: lab05-dlq-inspector
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - dlq-inspector-api:8080

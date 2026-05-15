@@ -1,0 +1,139 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6385:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  producer-api:
+    build: .
+    ports:
+      - "18310:8080"
+    environment:
+      APP_ROLE: producer
+      APP_PRODUCER_NAME: producer-api
+      APP_STREAM_NAME: order-events
+      APP_DLQ_STREAM_NAME: order-events:dlq
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 45s
+
+  payment-worker:
+    build: .
+    ports:
+      - "18311:8080"
+    environment:
+      APP_ROLE: payment-worker
+      APP_CONSUMER_NAME: payment-worker
+      APP_STREAM_NAME: order-events
+      APP_DLQ_STREAM_NAME: order-events:dlq
+      APP_GROUP_NAME: payment-processing
+      APP_FAILURE_PROBABILITY: ${PAYMENT_FAILURE_PROBABILITY:-0.4}
+      APP_PROCESSING_DELAY_MS: ${PAYMENT_PROCESSING_DELAY_MS:-200}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 45s
+
+  recovery-worker:
+    build: .
+    ports:
+      - "18312:8080"
+    environment:
+      APP_ROLE: recovery-worker
+      APP_CONSUMER_NAME: recovery-worker
+      APP_STREAM_NAME: order-events
+      APP_DLQ_STREAM_NAME: order-events:dlq
+      APP_GROUP_NAME: payment-processing
+      APP_FAILURE_PROBABILITY: "0"
+      APP_RECOVERY_FAILURE_PROBABILITY: ${RECOVERY_FAILURE_PROBABILITY:-0.2}
+      APP_RECOVERY_MIN_IDLE_MS: ${RECOVERY_MIN_IDLE_MS:-6000}
+      APP_RECOVERY_POLL_MS: ${RECOVERY_POLL_MS:-1500}
+      APP_MAX_RETRIES_BEFORE_DLQ: ${MAX_RETRIES_BEFORE_DLQ:-3}
+      APP_PROCESSING_DELAY_MS: ${RECOVERY_PROCESSING_DELAY_MS:-150}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 45s
+
+  dlq-inspector-api:
+    build: .
+    ports:
+      - "18313:8080"
+    environment:
+      APP_ROLE: dlq-inspector
+      APP_CONSUMER_NAME: dlq-inspector
+      APP_STREAM_NAME: order-events
+      APP_DLQ_STREAM_NAME: order-events:dlq
+      APP_GROUP_NAME: payment-processing
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 45s
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - "9097:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    depends_on:
+      producer-api:
+        condition: service_healthy
+      payment-worker:
+        condition: service_healthy
+      recovery-worker:
+        condition: service_healthy
+      dlq-inspector-api:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "3007:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
