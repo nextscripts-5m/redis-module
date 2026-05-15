@@ -1,0 +1,154 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6382:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  order-producer-api:
+    build: .
+    ports:
+      - "18100:8080"
+    environment:
+      APP_ROLE: producer
+      APP_PRODUCER_NAME: order-producer-api
+      APP_STREAM_NAME: order-events
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  billing-worker-1:
+    build: .
+    ports:
+      - "18101:8080"
+    environment:
+      APP_ROLE: group-worker
+      APP_STREAM_NAME: order-events
+      APP_GROUP_NAME: billing
+      APP_CONSUMER_NAME: billing-worker-1
+      APP_FAILURE_PROBABILITY: ${BILLING_WORKER_FAILURE_PROBABILITY:-0.0}
+      APP_PROCESSING_DELAY_MS: ${BILLING_WORKER_PROCESSING_DELAY_MS:-0}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  billing-worker-2:
+    build: .
+    ports:
+      - "18102:8080"
+    environment:
+      APP_ROLE: group-worker
+      APP_STREAM_NAME: order-events
+      APP_GROUP_NAME: billing
+      APP_CONSUMER_NAME: billing-worker-2
+      APP_FAILURE_PROBABILITY: ${BILLING_WORKER_FAILURE_PROBABILITY:-0.0}
+      APP_PROCESSING_DELAY_MS: ${BILLING_WORKER_PROCESSING_DELAY_MS:-0}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  shipping-worker-1:
+    build: .
+    ports:
+      - "18103:8080"
+    environment:
+      APP_ROLE: group-worker
+      APP_STREAM_NAME: order-events
+      APP_GROUP_NAME: shipping
+      APP_CONSUMER_NAME: shipping-worker-1
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  analytics-worker-1:
+    build: .
+    ports:
+      - "18104:8080"
+    environment:
+      APP_ROLE: group-worker
+      APP_STREAM_NAME: order-events
+      APP_GROUP_NAME: analytics
+      APP_CONSUMER_NAME: analytics-worker-1
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - "9093:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    depends_on:
+      order-producer-api:
+        condition: service_healthy
+      billing-worker-1:
+        condition: service_healthy
+      billing-worker-2:
+        condition: service_healthy
+      shipping-worker-1:
+        condition: service_healthy
+      analytics-worker-1:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "3003:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

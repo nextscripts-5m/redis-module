@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 3s
+  evaluation_interval: 3s
+
+scrape_configs:
+  - job_name: stream-producer
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - order-producer-api:8080
+
+  - job_name: billing-workers
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - billing-worker-1:8080
+          - billing-worker-2:8080
+
+  - job_name: shipping-worker
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - shipping-worker-1:8080
+
+  - job_name: analytics-worker
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - analytics-worker-1:8080

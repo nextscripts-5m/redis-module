@@ -7,12 +7,12 @@ Each example lives in its own folder and is dockerized independently. Implemente
 ```text
 01-pubsub-live-broadcast/
 02-stream-append-log/
+03-consumer-groups-worker-pool/
 ```
 
 Planned labs:
 
 ```text
-03-consumer-groups-worker-pool/
 04-ordering-sharded-streams/
 05-failure-recovery-dlq-observability/
 ```

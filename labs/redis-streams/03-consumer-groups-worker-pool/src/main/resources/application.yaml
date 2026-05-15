@@ -1,0 +1,36 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: redis-consumer-groups-lab
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+app:
+  role: ${APP_ROLE:producer}
+  stream-name: ${APP_STREAM_NAME:order-events}
+  producer-name: ${APP_PRODUCER_NAME:order-producer-api}
+  group-name: ${APP_GROUP_NAME:billing}
+  consumer-name: ${APP_CONSUMER_NAME:worker-1}
+  read-batch-size: ${APP_READ_BATCH_SIZE:5}
+  read-block-ms: ${APP_READ_BLOCK_MS:2000}
+  processing-delay-ms: ${APP_PROCESSING_DELAY_MS:0}
+  failure-probability: ${APP_FAILURE_PROBABILITY:0.0}
+  recent-event-limit: ${APP_RECENT_EVENT_LIMIT:30}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true
