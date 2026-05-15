@@ -4,4 +4,4 @@
 
 # Chapter 03 - pub/sub and streams
 
-* continue implementing lab-03
+* implement lab-04 ordering sharded streams
