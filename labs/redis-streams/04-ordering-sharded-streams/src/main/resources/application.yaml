@@ -1,0 +1,41 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: redis-ordering-sharded-streams-lab
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+app:
+  role: ${APP_ROLE:producer}
+  mode: ${APP_MODE:unordered}
+  stream-name: ${APP_STREAM_NAME:order-events}
+  stream-prefix: ${APP_STREAM_PREFIX:orders:}
+  shard-count: ${APP_SHARD_COUNT:4}
+  shard-index: ${APP_SHARD_INDEX:0}
+  producer-name: ${APP_PRODUCER_NAME:producer}
+  group-name: ${APP_GROUP_NAME:billing}
+  consumer-name: ${APP_CONSUMER_NAME:worker-1}
+  order-created-delay-ms: ${APP_ORDER_CREATED_DELAY_MS:3000}
+  order-paid-delay-ms: ${APP_ORDER_PAID_DELAY_MS:100}
+  default-processing-delay-ms: ${APP_DEFAULT_PROCESSING_DELAY_MS:200}
+  read-batch-size: ${APP_READ_BATCH_SIZE:5}
+  read-block-ms: ${APP_READ_BLOCK_MS:2000}
+  recent-event-limit: ${APP_RECENT_EVENT_LIMIT:40}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  prometheus:
+    metrics:
+      export:
+        enabled: true

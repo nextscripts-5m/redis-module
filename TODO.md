@@ -4,4 +4,5 @@
 
 # Chapter 03 - pub/sub and streams
 
-* implement lab-04 ordering sharded streams
+* test lab-04
+* implement lab-05 failure recovery dlq observability

@@ -1,0 +1,247 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6383:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  unordered-producer-api:
+    build: .
+    ports:
+      - "18200:8080"
+    environment:
+      APP_ROLE: producer
+      APP_MODE: unordered
+      APP_PRODUCER_NAME: unordered-producer-api
+      APP_STREAM_NAME: order-events
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  unordered-worker-1:
+    build: .
+    ports:
+      - "18201:8080"
+    environment:
+      APP_ROLE: worker
+      APP_MODE: unordered
+      APP_STREAM_NAME: order-events
+      APP_GROUP_NAME: billing
+      APP_CONSUMER_NAME: billing-worker-1
+      APP_ORDER_CREATED_DELAY_MS: ${UNORDERED_ORDER_CREATED_DELAY_MS:-3000}
+      APP_ORDER_PAID_DELAY_MS: ${UNORDERED_ORDER_PAID_DELAY_MS:-100}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  unordered-worker-2:
+    build: .
+    ports:
+      - "18202:8080"
+    environment:
+      APP_ROLE: worker
+      APP_MODE: unordered
+      APP_STREAM_NAME: order-events
+      APP_GROUP_NAME: billing
+      APP_CONSUMER_NAME: billing-worker-2
+      APP_ORDER_CREATED_DELAY_MS: ${UNORDERED_ORDER_CREATED_DELAY_MS:-3000}
+      APP_ORDER_PAID_DELAY_MS: ${UNORDERED_ORDER_PAID_DELAY_MS:-100}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  sharded-producer-api:
+    build: .
+    ports:
+      - "18210:8080"
+    environment:
+      APP_ROLE: producer
+      APP_MODE: sharded
+      APP_PRODUCER_NAME: sharded-producer-api
+      APP_STREAM_PREFIX: "orders:"
+      APP_SHARD_COUNT: "4"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  shard-worker-0:
+    build: .
+    ports:
+      - "18211:8080"
+    environment:
+      APP_ROLE: worker
+      APP_MODE: sharded
+      APP_STREAM_PREFIX: "orders:"
+      APP_SHARD_COUNT: "4"
+      APP_SHARD_INDEX: "0"
+      APP_GROUP_NAME: billing
+      APP_CONSUMER_NAME: shard-worker-0
+      APP_ORDER_CREATED_DELAY_MS: ${SHARDED_ORDER_CREATED_DELAY_MS:-3000}
+      APP_ORDER_PAID_DELAY_MS: ${SHARDED_ORDER_PAID_DELAY_MS:-100}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  shard-worker-1:
+    build: .
+    ports:
+      - "18212:8080"
+    environment:
+      APP_ROLE: worker
+      APP_MODE: sharded
+      APP_STREAM_PREFIX: "orders:"
+      APP_SHARD_COUNT: "4"
+      APP_SHARD_INDEX: "1"
+      APP_GROUP_NAME: billing
+      APP_CONSUMER_NAME: shard-worker-1
+      APP_ORDER_CREATED_DELAY_MS: ${SHARDED_ORDER_CREATED_DELAY_MS:-3000}
+      APP_ORDER_PAID_DELAY_MS: ${SHARDED_ORDER_PAID_DELAY_MS:-100}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  shard-worker-2:
+    build: .
+    ports:
+      - "18213:8080"
+    environment:
+      APP_ROLE: worker
+      APP_MODE: sharded
+      APP_STREAM_PREFIX: "orders:"
+      APP_SHARD_COUNT: "4"
+      APP_SHARD_INDEX: "2"
+      APP_GROUP_NAME: billing
+      APP_CONSUMER_NAME: shard-worker-2
+      APP_ORDER_CREATED_DELAY_MS: ${SHARDED_ORDER_CREATED_DELAY_MS:-3000}
+      APP_ORDER_PAID_DELAY_MS: ${SHARDED_ORDER_PAID_DELAY_MS:-100}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  shard-worker-3:
+    build: .
+    ports:
+      - "18214:8080"
+    environment:
+      APP_ROLE: worker
+      APP_MODE: sharded
+      APP_STREAM_PREFIX: "orders:"
+      APP_SHARD_COUNT: "4"
+      APP_SHARD_INDEX: "3"
+      APP_GROUP_NAME: billing
+      APP_CONSUMER_NAME: shard-worker-3
+      APP_ORDER_CREATED_DELAY_MS: ${SHARDED_ORDER_CREATED_DELAY_MS:-3000}
+      APP_ORDER_PAID_DELAY_MS: ${SHARDED_ORDER_PAID_DELAY_MS:-100}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 40s
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - "9094:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    depends_on:
+      unordered-producer-api:
+        condition: service_healthy
+      unordered-worker-1:
+        condition: service_healthy
+      unordered-worker-2:
+        condition: service_healthy
+      sharded-producer-api:
+        condition: service_healthy
+      shard-worker-0:
+        condition: service_healthy
+      shard-worker-1:
+        condition: service_healthy
+      shard-worker-2:
+        condition: service_healthy
+      shard-worker-3:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "3004:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
