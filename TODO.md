@@ -1,4 +1,4 @@
 # Chapter 04 - distributed patterns
 
-* do theory
+* review theory
 * do labs
