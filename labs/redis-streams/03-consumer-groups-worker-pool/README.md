@@ -146,14 +146,6 @@ docker compose exec redis redis-cli XPENDING order-events billing
 docker compose exec redis redis-cli XPENDING order-events billing - + 10
 ```
 
-Message for the classroom:
-
-```text
-XREADGROUP delivers an entry to a consumer.
-Without XACK, the entry stays pending in the PEL.
-This is Redis-managed at-least-once delivery, unlike the client cursor in lab 02.
-```
-
 ## 6. Stop One Billing Worker
 
 ```bash
