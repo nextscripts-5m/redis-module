@@ -153,7 +153,6 @@ GET lock:orders:88
 
 **Expected:** `EVAL` → `(integer) 0`, `GET` → `"worker-b:fast"`.
 
-
 ---
 
 ## Cleanup
