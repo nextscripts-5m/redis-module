@@ -1,0 +1,23 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: distributed-lock-lab
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+app:
+  worker-name: ${APP_WORKER_NAME:worker-local}
+  lock-key-prefix: ${APP_LOCK_KEY_PREFIX:lock:orders:}
+  default-lock-ttl-ms: ${APP_LOCK_TTL_MS:2000}
+  default-processing-delay-ms: ${APP_PROCESSING_DELAY_MS:5000}
+  recent-event-limit: ${APP_RECENT_EVENT_LIMIT:20}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health

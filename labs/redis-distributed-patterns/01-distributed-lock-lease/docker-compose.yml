@@ -8,3 +8,43 @@ services:
       interval: 3s
       timeout: 2s
       retries: 20
+
+  worker-a:
+    build: .
+    ports:
+      - "18100:8080"
+    environment:
+      APP_WORKER_NAME: worker-a:slow
+      APP_LOCK_TTL_MS: "2000"
+      APP_PROCESSING_DELAY_MS: "5000"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 45s
+
+  worker-b:
+    build: .
+    ports:
+      - "18101:8080"
+    environment:
+      APP_WORKER_NAME: worker-b:fast
+      APP_LOCK_TTL_MS: "30000"
+      APP_PROCESSING_DELAY_MS: "100"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 45s
