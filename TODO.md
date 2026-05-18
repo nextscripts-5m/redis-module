@@ -1,4 +1,4 @@
-# Chapter 04 - distributed patterns
+# Chapter 05 - Scalability
 
-* review theory
+* do theory
 * do labs
