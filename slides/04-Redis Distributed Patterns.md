@@ -63,11 +63,11 @@ sequenceDiagram
 ### Correctness caveats
 
 
-| Risk              | What goes wrong                                                                          | Mitigation idea                                                                                              |
-| ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **TTL too short** | Work still running; lock expires; another client enters → **double execution**.          | TTL ≥ p99 job time + margin; **extend lease** in-process if safe; or **short lock + idempotent** downstream. |
-| **TTL too long**  | Crash before release → others wait until expiry.                                         | Trade availability vs safety; monitor lock wait time.                                                        |
-| **No fencing**    | Stale holder finishes after lease expiry and **writes anyway** → last writer wins chaos. | **Fencing token** (monotonic) accepted only if greater than last seen by storage (see below).                |
+| Risk              | What goes wrong                                                                          | Mitigation idea                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **TTL too short** | Work still running; lock expires; another client enters → **double execution**.          | **extend lease** in-process if safe; or **short lock + idempotent** downstream.               |
+| **TTL too long**  | Crash before release → others wait until expiry.                                         | Trade availability vs safety; monitor lock wait time.                                         |
+| **No fencing**    | Stale holder finishes after lease expiry and **writes anyway** → last writer wins chaos. | **Fencing token** (monotonic) accepted only if greater than last seen by storage (see below). |
 
 
 Locks **serialize** work; they do not magically make **non-atomic multi-step workflows** safe across different stores.
@@ -91,6 +91,8 @@ Redis can hold the lock; the **authority** that enforces ordering should be the 
 ### Fixed window (counter + TTL)
 
 The **fixed-window counter** splits time into **fixed intervals** (seconds, minutes, hours). For each interval you count requests for a **scope** (user id, IP, tenant, API key). If the count **exceeds** a predefined limit, requests are **blocked** until the **next** interval—like a speed limit: exceed it → red light until the window opens again.
+
+![](./images/redis-fixed-window.png)
 
 **Four steps**
 
@@ -170,7 +172,7 @@ sequenceDiagram
 
 Unlike a **fixed window**, the limit applies to a **rolling** interval: “how many requests in the **last** *T* seconds?”, so enforcement reacts **immediately** as old events age out—no waiting for the next calendar bucket.
 
-
+![](./images/redis-sliding-window.png)
 
 **Four steps**
 
@@ -185,7 +187,7 @@ Unlike a **fixed window**, the limit applies to a **rolling** interval: “how m
 
 `now_ms` is **not** fixed in advance: use Redis `**TIME`** if you want the server clock. `T_ms` is the window length in ms; `cutoff = now_ms - T_ms` (inclusive trim below).
 
-Assume the next request is handled at `**now_ms = 1700000003000**` with `**T_ms = 60000**` (so `**cutoff = now_ms − T_ms = 1699940003000**`).
+Assume the next request is handled at `**now_ms = 1700000003000`** with `**T_ms = 60000**` (so `**cutoff = now_ms − T_ms = 1699940003000**`).
 
 ```text
 ZADD ratelimit:user:42 1700000001000 req-001
@@ -201,9 +203,9 @@ If `**ZCARD**` is already **≥ limit** before the last `ZADD`, **skip** that li
 
 The **token bucket** shapes traffic smoothly: a bucket holds up to `**C`** tokens; tokens **refill** continuously at rate `**r`** (same time unit everywhere, e.g. per second). Each **allowed** request spends **one** token. If the bucket is **empty**, block (or queue) until refill catches up. Unlike a hard fixed clock, you can **burst** briefly as long as you still have banked tokens under `**C`**.
 
+![](./images/redis-token-bucket.png)
 
-
-
+![](./images/redis-token-bucket2.png)
 
 **Four steps**
 
@@ -212,7 +214,7 @@ The **token bucket** shapes traffic smoothly: a bucket holds up to `**C`** token
 3. **On each request** — compute `elapsed = now − last_refill`, add `elapsed × r` to the count, **clamp** to `**C`**, then set `last_refill = now`.
 4. **Decide** — if `tokens ≥ 1`, **decrement** by one and **allow**; otherwise **deny**.
 
-**Redis layout** — one **Hash** per scope is typical, e.g. `tb:<clientId>` with fields like `tokens` and `last_ms` (epoch ms). `**HGETALL`** / `**HMGET**` reads both fields in one round-trip; `**HSET**` writes them back after the computation.
+**Redis layout** — one **Hash** per scope is typical, e.g. `tb:<clientId>` with fields like `tokens` and `last_ms` (epoch ms). `**HGETALL`** / `**HMGET`** reads both fields in one round-trip; `**HSET**` writes them back after the computation.
 
 
 | Pattern                       | Pros                                          | Cons                                                                                             |
@@ -229,7 +231,7 @@ The **token bucket** shapes traffic smoothly: a bucket holds up to `**C`** token
 A common pattern is to use Redis as a **session store** so **stateless** web servers can share the same session data.
 When a user **logs in**, the application stores the **session data** in Redis and issues a **unique session id**. That id is sent back to the client, usually as a **cookie**.
 
-
+![](./images/redis-session-sharing.png)
 
 Redis is an **in-memory** database: if the Redis server **restarts**, session data that lived only in memory can be **lost**.
 

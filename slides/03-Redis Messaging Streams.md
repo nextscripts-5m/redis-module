@@ -24,7 +24,6 @@
     - [Durability depends on Redis configuration](#durability-depends-on-redis-configuration)
   - [Delivery Semantics](#delivery-semantics)
   - [Redis Streams vs Dedicated Brokers](#redis-streams-vs-dedicated-brokers)
-  - [Design Guidelines](#design-guidelines)
   - [Reference](#reference)
 
 ## Messaging in Microservice Architectures
@@ -636,31 +635,6 @@ Prefer a dedicated broker when:
 - event retention is measured in days, weeks, or months at high volume;
 - many independent teams depend on the event log as a platform;
 - losing Redis memory capacity would make messaging too expensive.
-
----
-
-## Design Guidelines
-
-Choose the messaging primitive based on failure behavior:
-
-- Use **Pub/Sub** for transient notifications where missing a message is acceptable.
-- Use **Streams without consumer groups** for simple append-and-read event history where each client manages its own cursor.
-- Use **Streams with consumer groups** for worker pools, retries, and at-least-once processing.
-- Use a **dedicated broker** when messaging is a central platform capability rather than a local service concern.
-
-Keep these rules in code reviews:
-
-- Every stream should have an explicit retention policy.
-- Every consumer group should have a recovery story for pending messages.
-- Every at-least-once consumer should be idempotent.
-- `XACK` should happen after the business side effect succeeds.
-- Stream entry fields should be stable and versionable enough for independent consumers.
-- Decide whether ordering is required, and by which business key.
-- Use sharded streams when ordering per key and parallelism are both required.
-- Define retry limits and a dead-letter stream for poison messages.
-- Monitor stream length, group lag, pending entries, and Redis memory.
-- Use the Transactional Outbox pattern when publishing events from database transactions.
-- Treat Redis persistence, replication, failover, and eviction policy as part of the messaging design.
 
 ---
 
