@@ -1,0 +1,241 @@
+services:
+  redis-master:
+    image: redis:7-alpine
+    hostname: redis-master
+    ports:
+      - "6391:6379"
+    volumes:
+      - ./config/redis/master.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  redis-replica-1:
+    image: redis:7-alpine
+    hostname: redis-replica-1
+    ports:
+      - "6392:6379"
+    volumes:
+      - ./config/redis/replica.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  redis-replica-2:
+    image: redis:7-alpine
+    hostname: redis-replica-2
+    ports:
+      - "6393:6379"
+    volumes:
+      - ./config/redis/replica.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  redis-replica-3:
+    image: redis:7-alpine
+    hostname: redis-replica-3
+    ports:
+      - "6394:6379"
+    volumes:
+      - ./config/redis/replica.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    depends_on:
+      redis-master:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  sentinel-1:
+    image: redis:7-alpine
+    hostname: sentinel-1
+    ports:
+      - "26379:26379"
+    entrypoint: ["sh", "/docker-entrypoint.sh"]
+    volumes:
+      - ./config/sentinel/sentinel.conf:/etc/sentinel/sentinel.conf:ro
+      - ./config/sentinel/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - sentinel-1-data:/data
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+      redis-replica-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+      start_period: 10s
+
+  sentinel-2:
+    image: redis:7-alpine
+    hostname: sentinel-2
+    ports:
+      - "26380:26379"
+    entrypoint: ["sh", "/docker-entrypoint.sh"]
+    volumes:
+      - ./config/sentinel/sentinel.conf:/etc/sentinel/sentinel.conf:ro
+      - ./config/sentinel/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - sentinel-2-data:/data
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+      redis-replica-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+      start_period: 10s
+
+  sentinel-3:
+    image: redis:7-alpine
+    hostname: sentinel-3
+    ports:
+      - "26381:26379"
+    entrypoint: ["sh", "/docker-entrypoint.sh"]
+    volumes:
+      - ./config/sentinel/sentinel.conf:/etc/sentinel/sentinel.conf:ro
+      - ./config/sentinel/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - sentinel-3-data:/data
+    depends_on:
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+      redis-replica-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+      start_period: 10s
+
+  redis-exporter-master:
+    image: oliver006/redis_exporter:v1.67.0
+    environment:
+      REDIS_ADDR: redis://redis-master:6379
+    depends_on:
+      redis-master:
+        condition: service_healthy
+
+  redis-exporter-replica-1:
+    image: oliver006/redis_exporter:v1.67.0
+    environment:
+      REDIS_ADDR: redis://redis-replica-1:6379
+    depends_on:
+      redis-replica-1:
+        condition: service_healthy
+
+  redis-exporter-replica-2:
+    image: oliver006/redis_exporter:v1.67.0
+    environment:
+      REDIS_ADDR: redis://redis-replica-2:6379
+    depends_on:
+      redis-replica-2:
+        condition: service_healthy
+
+  redis-exporter-replica-3:
+    image: oliver006/redis_exporter:v1.67.0
+    environment:
+      REDIS_ADDR: redis://redis-replica-3:6379
+    depends_on:
+      redis-replica-3:
+        condition: service_healthy
+
+  traffic-loader:
+    build: .
+    ports:
+      - "18400:8080"
+    environment:
+      APP_COUNTER_KEY: lab:counter
+      APP_WRITE_INTERVAL_MS: "20"
+      APP_READ_INTERVAL_MS: "10"
+      APP_REPLICA_HOSTS: redis-replica-1:6379,redis-replica-2:6379,redis-replica-3:6379
+    depends_on:
+      sentinel-1:
+        condition: service_healthy
+      sentinel-2:
+        condition: service_healthy
+      sentinel-3:
+        condition: service_healthy
+      redis-master:
+        condition: service_healthy
+      redis-replica-1:
+        condition: service_healthy
+      redis-replica-2:
+        condition: service_healthy
+      redis-replica-3:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health/liveness"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 50s
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - "9098:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    depends_on:
+      traffic-loader:
+        condition: service_started
+      redis-exporter-master:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "3008:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  sentinel-1-data:
+  sentinel-2-data:
+  sentinel-3-data:

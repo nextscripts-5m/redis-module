@@ -1,0 +1,41 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: sentinel-traffic-loader
+  data:
+    redis:
+      sentinel:
+        master: mymaster
+        nodes:
+          - sentinel-1:26379
+          - sentinel-2:26379
+          - sentinel-3:26379
+
+app:
+  counter-key: ${APP_COUNTER_KEY:lab:counter}
+  write-interval-ms: ${APP_WRITE_INTERVAL_MS:20}
+  read-interval-ms: ${APP_READ_INTERVAL_MS:10}
+  replica-hosts: ${APP_REPLICA_HOSTS:redis-replica-1:6379,redis-replica-2:6379,redis-replica-3:6379}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  endpoint:
+    health:
+      show-details: always
+      probes:
+        enabled: true
+  health:
+    redis:
+      enabled: false
+  metrics:
+    tags:
+      application: sentinel-traffic-loader
+  prometheus:
+    metrics:
+      export:
+        enabled: true

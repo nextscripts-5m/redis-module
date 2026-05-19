@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 3s
+  evaluation_interval: 3s
+
+scrape_configs:
+  - job_name: redis-exporter
+    static_configs:
+      - targets: [redis-exporter-master:9121]
+        labels:
+          redis_node: master
+          instance: redis-master
+      - targets: [redis-exporter-replica-1:9121]
+        labels:
+          redis_node: replica-1
+          instance: redis-replica-1
+      - targets: [redis-exporter-replica-2:9121]
+        labels:
+          redis_node: replica-2
+          instance: redis-replica-2
+      - targets: [redis-exporter-replica-3:9121]
+        labels:
+          redis_node: replica-3
+          instance: redis-replica-3
+
+  - job_name: sentinel-traffic-loader
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [traffic-loader:8080]
