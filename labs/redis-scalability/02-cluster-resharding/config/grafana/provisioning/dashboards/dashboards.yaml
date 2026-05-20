@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: redis-cluster-reshard-lab
+    orgId: 1
+    folder: Redis Scalability
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

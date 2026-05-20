@@ -1,0 +1,88 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" },
+          "unit": "ops"
+        }
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "targets": [
+        {
+          "expr": "sum by (instance) (rate(redis_commands_processed_total[1m]))",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Redis ops/s per master",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
+      "id": 2,
+      "targets": [{ "expr": "redis_cluster_slots_assigned", "legendFormat": "assigned", "refId": "A" }],
+      "title": "Slots assigned",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 8 },
+      "id": 3,
+      "targets": [{ "expr": "redis_cluster_slots_fail", "legendFormat": "fail", "refId": "A" }],
+      "title": "Slots fail",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 8 },
+      "id": 4,
+      "targets": [{ "expr": "redis_cluster_known_nodes", "legendFormat": "nodes", "refId": "A" }],
+      "title": "Known nodes",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 24, "x": 0, "y": 14 },
+      "id": 6,
+      "targets": [
+        { "expr": "rate(lab_cluster_command_errors_total[1m])", "legendFormat": "errors/s", "refId": "A" },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(lab_cluster_command_duration_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p95",
+          "refId": "B"
+        }
+      ],
+      "title": "Loader errors & latency p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 21 },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "max(sum by (instance) (rate(redis_commands_processed_total[1m]))) / clamp_min(min(sum by (instance) (rate(redis_commands_processed_total[1m]))), 0.001)",
+          "legendFormat": "imbalance ratio",
+          "refId": "A"
+        }
+      ],
+      "title": "Load imbalance (max/min ops per master)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 39,
+  "tags": ["redis-scalability", "cluster"],
+  "time": { "from": "now-15m", "to": "now" },
+  "title": "Redis Cluster resharding lab",
+  "uid": "redis-cluster-reshard-lab",
+  "version": 1
+}

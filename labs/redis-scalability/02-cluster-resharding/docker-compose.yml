@@ -1,0 +1,165 @@
+services:
+  cluster-1:
+    image: redis:7-alpine
+    hostname: cluster-1
+    ports:
+      - "6401:6379"
+    volumes:
+      - ./config/redis/cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 25
+
+  cluster-2:
+    image: redis:7-alpine
+    hostname: cluster-2
+    ports:
+      - "6402:6379"
+    volumes:
+      - ./config/redis/cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 25
+
+  cluster-3:
+    image: redis:7-alpine
+    hostname: cluster-3
+    ports:
+      - "6403:6379"
+    volumes:
+      - ./config/redis/cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 25
+
+  cluster-4:
+    image: redis:7-alpine
+    hostname: cluster-4
+    ports:
+      - "6405:6379"
+    volumes:
+      - ./config/redis/cluster.conf:/usr/local/etc/redis/redis.conf:ro
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    profiles:
+      - scale-out
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 25
+
+  cluster-init:
+    image: redis:7-alpine
+    depends_on:
+      cluster-1:
+        condition: service_healthy
+      cluster-2:
+        condition: service_healthy
+      cluster-3:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -eu
+        echo "Waiting for cluster nodes..."
+        sleep 3
+        if redis-cli -h cluster-1 cluster info 2>/dev/null | grep -q 'cluster_state:ok'; then
+          echo "Cluster already initialized."
+          exit 0
+        fi
+        echo "Creating 3-master cluster (no replicas)..."
+        redis-cli --cluster create \
+          cluster-1:6379 cluster-2:6379 cluster-3:6379 \
+          --cluster-replicas 0 --cluster-yes
+        echo "Cluster ready."
+    restart: "no"
+
+  redis-exporter-1:
+    image: oliver006/redis_exporter:v1.67.0
+    environment:
+      REDIS_ADDR: redis://cluster-1:6379
+    depends_on:
+      cluster-init:
+        condition: service_completed_successfully
+
+  redis-exporter-2:
+    image: oliver006/redis_exporter:v1.67.0
+    environment:
+      REDIS_ADDR: redis://cluster-2:6379
+    depends_on:
+      cluster-init:
+        condition: service_completed_successfully
+
+  redis-exporter-3:
+    image: oliver006/redis_exporter:v1.67.0
+    environment:
+      REDIS_ADDR: redis://cluster-3:6379
+    depends_on:
+      cluster-init:
+        condition: service_completed_successfully
+
+  redis-exporter-4:
+    image: oliver006/redis_exporter:v1.67.0
+    profiles:
+      - scale-out
+    environment:
+      REDIS_ADDR: redis://cluster-4:6379
+    depends_on:
+      cluster-4:
+        condition: service_healthy
+
+  cluster-loader:
+    build: .
+    ports:
+      - "18410:8080"
+    environment:
+      SPRING_DATA_REDIS_CLUSTER_NODES: cluster-1:6379,cluster-2:6379,cluster-3:6379
+      APP_LOAD_INTERVAL_MS: "5"
+      APP_HOTSPOT_RATIO: "0.8"
+    depends_on:
+      cluster-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+      start_period: 45s
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    ports:
+      - "9099:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-lifecycle
+    depends_on:
+      cluster-loader:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    ports:
+      - "3009:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./config/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./config/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus

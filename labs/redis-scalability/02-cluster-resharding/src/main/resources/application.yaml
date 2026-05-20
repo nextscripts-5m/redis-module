@@ -1,0 +1,29 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: cluster-loader
+  data:
+    redis:
+      cluster:
+        nodes: ${SPRING_DATA_REDIS_CLUSTER_NODES:localhost:6401,localhost:6402,localhost:6403}
+        max-redirects: 8
+
+app:
+  load-interval-ms: ${APP_LOAD_INTERVAL_MS:5}
+  hotspot-ratio: ${APP_HOTSPOT_RATIO:0.8}
+  hotspot-tag: "{hot}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      application: cluster-loader
+  prometheus:
+    metrics:
+      export:
+        enabled: true

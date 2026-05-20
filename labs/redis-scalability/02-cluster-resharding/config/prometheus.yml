@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 3s
+  evaluation_interval: 3s
+
+scrape_configs:
+  - job_name: redis-exporter
+    static_configs:
+      - targets: [redis-exporter-1:9121]
+        labels:
+          instance: cluster-1
+          redis_node: cluster-1
+      - targets: [redis-exporter-2:9121]
+        labels:
+          instance: cluster-2
+          redis_node: cluster-2
+      - targets: [redis-exporter-3:9121]
+        labels:
+          instance: cluster-3
+          redis_node: cluster-3
+      - targets: [redis-exporter-4:9121]
+        labels:
+          instance: cluster-4
+          redis_node: cluster-4
+
+  - job_name: cluster-loader
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: [cluster-loader:8080]
