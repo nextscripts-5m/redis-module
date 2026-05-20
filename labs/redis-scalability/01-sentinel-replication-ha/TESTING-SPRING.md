@@ -28,7 +28,7 @@ With traffic running, open Grafana **Read ops/s per node** — reads on `redis-r
 ## Scenario 3 — Failover
 
 1. Keep traffic running (`/api/traffic/start`).
-2. `./scripts/kill-master.sh`
+2. `docker compose stop redis-master`
 3. Watch Grafana: **Write ops/s** shifts to a replica.
 
 ```bash

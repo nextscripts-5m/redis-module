@@ -27,4 +27,5 @@ curl -s -X POST http://localhost:18400/api/traffic/start | jq .
 
 - Grafana: [http://localhost:3008](http://localhost:3008)
 - Prometheus: [http://localhost:9098](http://localhost:9098)
+- Scenarios: **[TESTING-SPRING.md](./TESTING-SPRING.md)**
 
