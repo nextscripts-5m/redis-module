@@ -21,7 +21,6 @@
   - [Reliability Patterns](#reliability-patterns)
     - [Producer reliability and the outbox pattern](#producer-reliability-and-the-outbox-pattern)
     - [Poison messages and dead-letter streams](#poison-messages-and-dead-letter-streams)
-    - [Durability depends on Redis configuration](#durability-depends-on-redis-configuration)
   - [Delivery Semantics](#delivery-semantics)
   - [Redis Streams vs Dedicated Brokers](#redis-streams-vs-dedicated-brokers)
   - [Reference](#reference)
@@ -101,11 +100,11 @@ Pattern subscriptions allow matching multiple channels:
 
 Pub/Sub is intentionally lightweight, but the trade-offs are important:
 
-- **No persistence**: messages are not written to a log.
-- **No replay**: late subscribers cannot read old messages.
-- **No acknowledgment**: Redis does not know whether a subscriber processed the message successfully.
-- **No consumer groups**: every connected subscriber receives the broadcast; Redis does not distribute work across workers.
-- **At-most-once delivery in practice**: if the subscriber is offline or fails while handling the message, Redis will not redeliver it.
+- **No persistence**
+- **No replay**
+- **No acknowledgment**
+- **No consumer groups**
+- **At-most-once delivery in practice**
 
 Avoid Pub/Sub for business-critical workflows where losing a message means losing an order, payment, email, or audit event.
 
@@ -538,6 +537,23 @@ background publisher:
   - marks rows as published
 ```
 
+```mermaid
+sequenceDiagram
+  participant API as Order API
+  participant DB as Database
+  participant Pub as Outbox publisher
+  participant R as Redis Stream
+
+  API->>DB: BEGIN — save order + outbox row
+  DB-->>API: COMMIT
+  Note over API: crash here OK — outbox row exists
+
+  Pub->>DB: SELECT unpublished outbox rows
+  Pub->>R: XADD event
+  Pub->>DB: mark row published
+  Note over Pub: crash after XADD, before mark → retry → duplicate XADD possible
+```
+
 This makes the database the source of truth for both state and the intent to publish. The publisher can retry safely, and consumers should still be idempotent because publication may happen more than once.
 
 ### Poison messages and dead-letter streams
@@ -565,23 +581,6 @@ if processing fails too many times:
 ```
 
 The dead-letter stream should be monitored and reviewed. It is not a trash bin; it is an operational queue for messages that need investigation or manual repair.
-
-### Durability depends on Redis configuration
-
-Streams are persisted Redis data structures, but the durability guarantee depends on how Redis is deployed.
-
-Important production settings and risks:
-
-- persistence mode: RDB snapshots, AOF, or both;
-- AOF `appendfsync` policy: controls how often Redis forces stream writes to disk (`always`, `everysec`, or `no`);
-- replication and failover behavior;
-- Redis Cluster sharding strategy;
-- memory limits and eviction policy;
-- backup and restore procedures.
-
-For example, if Redis is configured with aggressive eviction or weak persistence, Streams should not be treated as a durable event backbone. Kafka or another dedicated broker is usually a better fit when events are a long-term source of truth shared by many teams.
-
----
 
 ## Delivery Semantics
 
