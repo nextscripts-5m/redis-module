@@ -44,7 +44,7 @@ Observability:
 
 ## 2. Part A — Ordering Violation (Unordered)
 
-Two workers share `order-events` in group `billing`. Redis distributes entries across workers. Because `order-created` is slow and `order-paid` is fast, `**order-paid` can finish before `order-created**` for the same `orderId`.
+Two workers share `order-events` in group `billing`. Redis distributes entries across workers. Because `order-created` is slow and `order-paid` is fast, `order-paid` can finish before `order-created` for the same `orderId`.
 
 Publish a lifecycle pair (created then paid, back-to-back):
 
@@ -133,20 +133,6 @@ curl -s http://localhost:18211/api/worker/ordering-violations | jq .
 | `order-paid` before `order-created` | Possible                      | Avoided for same `orderId`    |
 | Throughput scaling                  | Horizontal in one group       | Horizontal across shards      |
 
-
-## 5. Inspect Streams in Redis
-
-Part A:
-
-```bash
-docker compose exec redis redis-cli XRANGE order-events - + COUNT 10
-```
-
-Part B (example lane 0):
-
-```bash
-docker compose exec redis redis-cli XRANGE orders:0 - + COUNT 10
-```
 
 ## 6. Reset
 
