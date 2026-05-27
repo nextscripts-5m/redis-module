@@ -45,12 +45,6 @@ for i in $(seq 1 25); do
 done
 ```
 
-Or install: `brew install watch`, then:
-
-```bash
-watch -n 2 'curl -s http://localhost:18313/api/dlq/summary | jq .pendingTotal'
-```
-
 ## 3. Case: crash before `XACK` (PEL)
 
 When `payment-worker` fails after `XREADGROUP` but **before** `XACK`, the entry stays in the **PEL** for consumer `payment-worker`.
@@ -87,7 +81,7 @@ curl -s http://localhost:18312/actuator/prometheus | grep idempotent
 
 ## 6. Case: poison message → DLQ
 
-If recovery keeps failing, a Redis counter `lab05:recovery_attempts:{messageId}` increments on each claim cycle. When it **exceeds** `APP_MAX_RETRIES_BEFORE_DLQ` (default **3**), the message is copied to `**order-events:dlq`** and acked off the main consumer group.
+If recovery keeps failing, a Redis counter `lab05:recovery_attempts:{messageId}` increments on each claim cycle. When it **exceeds** `APP_MAX_RETRIES_BEFORE_DLQ` (default **3**), the message is copied to `order-events:dlq` and acked off the main consumer group.
 
 Fast demo:
 
