@@ -8,7 +8,6 @@
   - [Read-through](#read-through)
   - [Write-through](#write-through)
   - [Write-behind (write-back)](#write-behind-write-back)
-- [Spring Boot and Redis for Caching](#spring-boot-and-redis-for-caching)
 - [Spring Cache Abstraction](#spring-cache-abstraction)
   - [`@Cacheable`](#cacheable)
   - [`@CacheEvict`](#cacheevict)
@@ -166,26 +165,6 @@ sequenceDiagram
     Note right of C: Cache updates in-memory value<br>DB update is async / delayed
     C-->>D: (Eventually) Write(key, value)
     A-->>A: Done
-```
-
----
-
-## Spring Boot and Redis for Caching
-
-Add Redis integration with the starter (version managed by your Spring Boot BOM):
-
-```xml
-<dependency>
-  <groupId>org.springframework.boot</groupId>
-  <artifactId>spring-boot-starter-data-redis</artifactId>
-</dependency>
-```
-
-Typical properties:
-
-```properties
-spring.data.redis.host=localhost
-spring.data.redis.port=6379
 ```
 
 ---
