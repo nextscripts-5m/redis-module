@@ -70,21 +70,6 @@ Read recent entries through the API:
 curl -s "http://localhost:18090/api/events?count=20" | jq .
 ```
 
-Read directly from Redis:
-
-```bash
-docker compose exec redis redis-cli XRANGE order-events - +
-```
-
-This demonstrates the main difference from Pub/Sub: entries remain in the stream after publication.
-
-What this proves:
-
-```text
-The events still exist in Redis.
-This does not prove that a reader has processed them.
-```
-
 ## 4. Replay from a Cursor
 
 Replay history from the beginning:
@@ -145,19 +130,6 @@ At this point, you can already prove that Redis retained those events:
 curl -s "http://localhost:18090/api/events?count=20" | jq .
 ```
 
-Or replay them from the beginning:
-
-```bash
-curl -s "http://localhost:18092/api/replay?from=0-0&count=20" | jq .
-```
-
-These two calls prove:
-
-```text
-The reader was offline, but the events were not lost.
-They are still stored in the Redis Stream.
-```
-
 Restart the reader:
 
 ```bash
@@ -176,12 +148,8 @@ This call proves a second, different point:
 The restarted reader has actually consumed and processed the retained events.
 ```
 
-So the demonstration has two layers:
+So this shows that the reader resumed from its cursor and processed those events. |
 
-| Check | What it proves |
-| ----- | -------------- |
-| `GET /api/events` or `GET /api/replay` | Redis retained the events while the reader was offline. |
-| `GET /api/reader/messages` after restart | The reader resumed from its cursor and processed those events. |
 
 The reader catches up because the stream retained the events and the reader resumed from its last stored ID.
 
