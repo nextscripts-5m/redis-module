@@ -99,21 +99,16 @@ The **fixed-window counter** splits time into **fixed intervals** (seconds, minu
 3. **Reset** — when the window ends, the counter is discarded or recreated (typically **TTL on the key**).
 4. **Enforce** — if `count >= limit`, deny; otherwise allow and increment.
 
-**Key design** — one Redis key per scope (e.g. `ratelimit:<clientId>`, optionally plus route or tenant), so counters for different callers do not overwrite each other.
-
 **Decision flow (each incoming request)**
 
 1. **Read** the current count for that scope (if the key does not exist, treat the count as **0**).
 2. If the count is already **≥ limit** → **deny** (policy choice: skip increment or still record—most APIs simply reject).
 3. Otherwise **allow** this request: **increment** the counter and attach a **TTL** that matches the window length so the key disappears when the window ends (next window starts fresh).
 
-**Why the TTL must not “slide”** — the expiry defines when the window **closes**. If you **reset TTL on every request**, the key keeps living longer and the window **never** aligns with clock time anymore. The usual fix is to set expiry **only on the first write of the window** (in Redis: `PEXPIRE … NX`).
-
 `PEXPIRE key milliseconds` — sets the key’s **remaining lifetime** in milliseconds; when it expires, Redis deletes the key so the counter resets for the next clock window.
 
 `PEXPIRE key ms NX` — applies that TTL **only if the key does not already have one**. If a TTL is already counting down, the command **does not** extend or replace it. That pins the window end on the **first** write of the interval instead of **sliding** the deadline on every request.
 
-**Why atomicity matters** — many app replicas may call Redis at once. Separating “read count” and “write count” in two unrelated round-trips opens a **race** (two instances both see `4`, both increment, you overshoot the limit).
 
 ```mermaid
 sequenceDiagram
@@ -168,7 +163,7 @@ sequenceDiagram
 
 ### Sliding window log
 
-Unlike a **fixed window**, the limit applies to a **rolling** interval: “how many requests in the **last** *T* seconds?”, so enforcement reacts **immediately** as old events age out—no waiting for the next calendar bucket.
+Unlike a **fixed window**, the limit applies to a **rolling** interval: “how many requests in the **last** *T* seconds?”.
 
 ![](./images/redis-sliding-window.png)
 
@@ -179,29 +174,6 @@ Unlike a **fixed window**, the limit applies to a **rolling** interval: “how m
 3. **Drop what is outside the window** — remove entries older than `now − T`.
 4. **Count and enforce** — if in-window count **≥ limit**, block; otherwise allow and append to the log.
 
-**Two Redis shapes (same idea, different primitives)**
-
-- **Classic — sorted set (`ZSET`)** — score = epoch ms, member = unique id; one entry per allowed request (memory grows with traffic).
-
-Walk-through for the next request (`now_ms` from `TIME` or app clock, `cutoff = now_ms − T_ms`, `limit = 2`):
-
-```text
-# now_ms = 1700000003000, T_ms = 60000 → cutoff = 1699940003000
-
-ZADD ratelimit:user:42 1700000001000 req-001
-→ 1                                    # new member added
-
-ZADD ratelimit:user:42 1700000002000 req-002
-→ 1
-
-ZREMRANGEBYSCORE ratelimit:user:42 -inf 1699940003000
-→ 0                                    # removed entries with score ≤ cutoff
-
-ZCARD ratelimit:user:42
-→ 2                                    # in-window count
-
-# 2 ≥ limit → reject req-003 (skip ZADD)
-```
 
 ### Token bucket on Redis
 
@@ -216,31 +188,24 @@ The **token bucket** shapes traffic smoothly: a bucket holds up to `C` tokens; t
 1. **Pick `C` and `r`** — max tokens in the bucket and refill speed.
 2. **Persist state** — current **token count** and **last refill time** (`now` when you last applied refill math).
 3. **On each request** — compute `elapsed = now − last_refill`, add `elapsed × r` to the count, **clamp** to `C`, then set `last_refill = now`.
-4. **Decide (admit or reject)** — step 3 already refilled and set `last_refill = now`. The balance `tokens` (≤ `C`) is what you charge against; each request costs **one whole token**:
+4. **Decide (admit or reject)** — each request costs **one whole token**:
    - `tokens ≥ 1` → **allow**.
    - `tokens < 1` → **deny**.
 
-   Example (`C = 10`, `r = 2`/s) — step 3 then step 4:
 
-   ```text
-   # Deny: bucket was empty, little time passed
-   tokens_before = 0,  elapsed = 0.2 s
-   → refill: min(10, 0 + 0.2 × 2) = 0.4
-   → decide: 0.4 < 1 → deny, persist tokens = 0.4
+* Example (`C = 10`, `r = 2`/s) — step 3 then step 4:
 
-   # Allow: one token already stored, short wait
-   tokens_before = 1.0,  elapsed = 0.1 s
-   → refill: min(10, 1.0 + 0.1 × 2) = 1.2
-   → decide: 1.2 ≥ 1 → allow, persist tokens = 1.2 − 1 = 0.2
-   ```
+```text
+# Deny: bucket was empty, little time passed
+tokens_before = 0,  elapsed = 0.2 s
+→ refill: min(10, 0 + 0.2 × 2) = 0.4
+→ decide: 0.4 < 1 → deny, persist tokens = 0.4
 
-
-
-| Pattern                       | Pros                                          | Cons                                                                                             |
-| ----------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Fixed window (counter + TTL)  | Minimal code, cheap                           | Edge bursts at clock boundaries; tighten with `WATCH` + `MULTI`/`EXEC` (retry) if needed |
-| Sliding window log (`ZSET`)   | Precise per request, portable Redis           | Memory grows with traffic                                                                        |
-| Token bucket (Hash + `WATCH`) | Smooth limit, **controlled bursts** up to *C* | `WATCH` retries under contention; strict units; single clock source                              |
+# Allow: one token already stored, short wait
+tokens_before = 1.0,  elapsed = 0.1 s
+→ refill: min(10, 1.0 + 0.1 × 2) = 1.2
+→ decide: 1.2 ≥ 1 → allow, persist tokens = 1.2 − 1 = 0.2
+```
 
 
 ---
@@ -271,19 +236,6 @@ sequenceDiagram
 
 ![](./images/redis-session-sharing.png)
 
-**Why Redis**
-
-- **Low latency** — most requests do at least one `GET` (or a short pipeline) per session lookup.
-- **Native TTL** — idle sessions expire without a custom sweeper (`EX` / `EXPIRE` on the session key).
-- **Shared by all replicas** — any instance can serve any user after login; no **sticky sessions** required on the load balancer.
-
-Redis holds **short-lived conversation state**, not the user system of record (that stays in the database).
-
-**Important limitation**
-
-Redis is **in-memory**. If the server **restarts** without durable recovery (AOF/RDB) or a warm replica, keys that existed only in RAM are **gone**—users appear logged out or see errors until they sign in again. Plan persistence, replication, or accept that risk for non-critical sessions.
-
----
 
 ## Idempotency keys
 
