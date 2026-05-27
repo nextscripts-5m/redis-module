@@ -5,7 +5,7 @@ Default Docker stack: **two app instances in parallel** (same artifact, differen
 
 | Compose service     | Host port | Role                                                                                       |
 | ------------------- | --------- | ------------------------------------------------------------------------------------------ |
-| `cache-lab-with`    | **8080**  | Spring Cache + Redis (`cache-aside`, eviction). Use this for README §2 (GET/PUT/DELETE).   |
+| `cache-lab-with`    | **8080**  | Spring Cache + Redis (`cache-aside`, eviction)                                             |
 | `cache-lab-nocache` | **8081**  | `nocache` profile: no cache, no Redis. Reads / benchmarks only, for latency comparison.    |
 | `redis`             | 6379      | Cache backend for the `:8080` instance only.                                               |
 | `prometheus`        | 9090      | Scrapes `/actuator/prometheus` on both apps (jobs `cache-with-redis` and `cache-nocache`). |
