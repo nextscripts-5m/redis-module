@@ -81,7 +81,6 @@ Even without exact numbers, the order of magnitude differences explain why movin
 ### Architecture Highlights
 
 - **Single-threaded, event-driven** → uses *select()/poll()* to handle multiple connections without blocking.
-  - non usa thread
 - **Atomic operations** → each command is executed fully without interruption, simplifying consistency
 
 
