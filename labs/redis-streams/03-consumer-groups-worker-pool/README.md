@@ -163,6 +163,8 @@ Only `billing-worker-1` continues to consume from the `billing` group. Restart t
 docker compose start billing-worker-2
 ```
 
+After restart, `**billing-worker-2` does not replay** the events that `billing-worker-1` already received and acknowledged while worker-2 was stopped. 
+
 ## 7. Reset the Lab
 
 ```bash
