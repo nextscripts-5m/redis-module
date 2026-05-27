@@ -11,7 +11,6 @@
   - [Sentinel](#sentinel)
     - [Role in the architecture](#role-in-the-architecture)
     - [Failover sequence](#failover-sequence)
-    - [Quorum, split-brain, and client implications](#quorum-split-brain-and-client-implications)
   - [Redis Cluster](#redis-cluster)
     - [Hash slots and sharding](#hash-slots-and-sharding)
     - [Client redirects: MOVED and ASK](#client-redirects-moved-and-ask)
@@ -132,8 +131,8 @@ So replication alone is **not** high availability: you need **Sentinel** or **Cl
 
 Two related settings on the primary:
 
-- `**min-replicas-to-write`** — refuse writes unless at least N replicas are connected (trade availability for lower risk of “acknowledged but nowhere else” writes).
-- `**min-replicas-max-lag`** — treat a replica as unavailable for that rule if lag exceeds a ceiling.
+- `min-replicas-to-write` — refuse writes unless at least N replicas are connected (trade availability for lower risk of “acknowledged but nowhere else” writes).
+- `min-replicas-max-lag` — treat a replica as unavailable for that rule if lag exceeds a ceiling.
 
 These do **not** make Redis synchronous by default; they narrow the window where a single primary crash loses data that was already acknowledged to clients.
 
@@ -188,15 +187,7 @@ sequenceDiagram
 
 - In-flight commands to the old primary **fail** or time out.
 - Writes may be **unavailable** for seconds.
-- A **short window** exists where two nodes might believe they are primary (**split-brain**) if quorum or network partitioning is misconfigured—design Sentinel count and `down-after-milliseconds` carefully.
-
-### Quorum, split-brain, and client implications
-
-- **Quorum** — number of Sentinels that must agree before failover.
-- **Split-brain** — two primaries accepting writes; catastrophic for locks and counters.
-- **Stale reads** — after promotion, former primary (if it returns) must not serve writes.
-
-Sentinel fits when you have **one** large Redis dataset (or a few named services), need **High Availability**, and do **not** need horizontal write sharding yet.
+- A **short window** exists where two nodes might believe they are primary (**split-brain**)
 
 ---
 
@@ -242,8 +233,6 @@ Cluster-aware clients maintain a **slot → node** map (cached from `CLUSTER SLO
 
 Commands that touch **multiple keys** require all keys in the **same slot**:
 
-- `MGET`, `MSET`, transactions (`MULTI`), many Lua scripts, some Streams consumer patterns spanning keys.
-
 **Hash tags** force related keys into one slot by hashing only the substring in `{...}`:
 
 ```text
@@ -269,7 +258,7 @@ Plan resharding in maintenance windows or with application tolerance for elevate
 If a **master** fails and its replicas are reachable:
 
 - The cluster attempts **replica promotion** for the failed master’s slots.
-- A **quorum of masters** must agree the master is down (cluster’s own gossip/failover protocol—not the same process as Sentinel).
+- A **quorum of masters** must agree the master is down.
 
 If too many masters fail or slots are uncovered, the cluster can enter **fail** states where subsets of keys are unavailable—capacity planning and **replica count per shard** matter.
 
@@ -281,14 +270,13 @@ If too many masters fail or slots are uncovered, the cluster can enter **fail** 
 
 **When to avoid Cluster:**
 
-- many arbitrary multi-key transactions across the whole keyspace;
 - team wants simplest ops and dataset still fits one primary + replicas + Sentinel.
 
 ---
 
 ## Failure Handling and Consistency Boundaries
 
-Redis is often described as **AP**-leaning in the CAP sense for replicated setups: under partition, availability and partition tolerance are prioritized; **linearizable** reads/writes across the whole cluster are **not** the default product promise.
+Redis is often described as **AP**-leaning in the CAP sense for replicated setups: under partition, availability and partition tolerance are prioritized.
 
 ### Failure modes at a glance
 
@@ -304,7 +292,7 @@ Redis is often described as **AP**-leaning in the CAP sense for replicated setup
 ### What clients should assume after failover
 
 1. **Reconnect** to the new primary.
-2. **Retry idempotent reads**; **non-idempotent writes** need business-level idempotency keys.
+2. **Retry idempotent reads**.
 3. **Invalidate local caches** of topology and sometimes of data (old primary’s last writes may never appear on the new primary).
 4. **Expect a brief write outage**; design APIs and UX accordingly.
 
