@@ -16,7 +16,6 @@
   - [Sorted Set](#sorted-set)
   - [Stream](#stream)
     - [Idempotation](#idempotation)
-  - [HyperLogLog](#hyperloglog)
 - [Atomicity, Transactions, and Concurrency Control](#atomicity-transactions-and-concurrency-control)
   - [Single-command atomicity](#single-command-atomicity)
   - [MULTI / EXEC transactions](#multi--exec-transactions)
@@ -557,49 +556,6 @@ XADD mystream IDMPAUTO producer-2 * field value        # producer-2 (pid) is pro
 
 ![](./images/idempotency.png)
 
-### HyperLogLog
-
-- HyperLogLog (HLL) estimates the **cardinality** of a set: “**about how many distinct elements** have I seen?” It **trades exact counts for bounded memory**: counting uniques with a normal `SET` grows roughly with the number of distinct values you must remember; an HLL keeps a **small fixed sketch** instead of the elements themselves.
-
-**Redis in practice**  
-
-- The Redis implementation uses **up to about 12 KB per key** and targets a **standard error near 0.81%**
-
-**Core commands**
-
-| Command | Role |
-|--------|------|
-| `PFADD key element [element …]` | Observe one or more values; updates the sketch. |
-| `PFCOUNT key [key …]` | Estimated cardinality of **one** HLL, or of the **union** of several keys if you pass multiple keys (coarser “zoomed out” view, e.g. a neighborhood made of many intersections). |
-| `PFMERGE destkey sourcekey [sourcekey …]` | Materialize a new HLL whose estimate matches the **union** of the sources (same idea as counting several sketches at once, but persisted under `destkey`). |
-
-**Worked example (Redis CLI style)**
-
-```bash
-> PFADD bikes Hyperion Deimos Phoebe Quaoar
-(integer) 1
-> PFCOUNT bikes
-(integer) 4
-> PFADD commuter_bikes Salacia Mimas Quaoar
-(integer) 1
-> PFMERGE all_bikes bikes commuter_bikes
-OK
-> PFCOUNT all_bikes
-(integer) 6
-```
-
-**Intuition from a “traffic heat map” mental model**  
-
-Imagine one HLL **per intersection**, and each passing vehicle contributes an identifier (e.g. a license plate hash) via `PFADD`. A **hotter** intersection shows a **higher** `PFCOUNT`. Calling `PFCOUNT` on **many intersection keys at once** approximates distinct vehicles over the **union** of those roads—useful when you zoom from one corner to a whole district.
-
-**Privacy and duplicates (why this is not a spy database)**  
-
-The sketch does **not** store the raw elements: you cannot “list” or export what was added, only ask for an **estimate**.
-
-**When *not* to use HLL**  
-
-If you need **membership tests**, iteration, or **exact** counts, use a **`SET`** (or another exact structure). HLL is for **large** streams of observations where approximate cardinality and **fixed memory** matter more than perfection.
-
 ---
 
 ## Atomicity, Transactions, and Concurrency Control
@@ -837,6 +793,4 @@ Redis supports different durability profiles:
 
 - [Redis data types](https://redis.io/docs/latest/develop/data-types/) — overview of native types, with links to deeper guides and command references.
 - [Bloom Filter and Cuckoo Filter](https://redis.io/docs/latest/develop/data-types/probabilistic/) - approximate membership data structures for space-efficient lookups.
-- [Probabilistic data types (HyperLogLog)](https://redis.io/docs/latest/develop/data-types/probabilistic/) — overview, commands, limits, and use cases aligned with the Redis documentation.  
-- [Redis new data structure: the HyperLogLog](https://antirez.com/news/75) — original write-up of the Redis implementation (error rate, 16k registers, merge, linear counting / bias correction, performance).
 - [Redis Cluster](https://medium.com/@rajatpachauri12345/what-are-redis-cluster-and-how-to-setup-redis-cluster-locally-69e87941d573) - What is Redis Cluster
