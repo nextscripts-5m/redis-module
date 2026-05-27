@@ -22,7 +22,6 @@
     - [Failure modes at a glance](#failure-modes-at-a-glance)
     - [What clients should assume after failover](#what-clients-should-assume-after-failover)
     - [Choosing a deployment model](#choosing-a-deployment-model)
-  - [Key Takeaways](#key-takeaways)
   - [Reference](#reference)
 
 ---
@@ -317,16 +316,6 @@ Redis is often described as **AP**-leaning in the CAP sense for replicated setup
 | HA, single dataset, moderate size | Primary + replicas + **Sentinel**                   | Cluster when write/memory ceiling hit             |
 | Large dataset or write scale      | **Cluster** (+ replicas per shard)                  | Multi-cluster by domain if blast radius too large |
 
-
----
-
-## Key Takeaways
-
-- **Replication** scales reads and enables failover copies; it does **not** scale writes or total memory for one logical dataset.
-- **Sentinel** automates failover and discovery for a **single-shard** HA deployment.
-- **Cluster** shards by **hash slots**; clients must handle **MOVED/ASK**; design keys for **hash tags** when you need multi-key atomicity.
-- **Consistency** is bounded: async replication, failover windows, and replica reads all require explicit application policy.
-- **Observability** (Prometheus + Grafana + `redis_exporter`) is part of scalability—failover and resharding without metrics are blind flight.
 
 ---
 

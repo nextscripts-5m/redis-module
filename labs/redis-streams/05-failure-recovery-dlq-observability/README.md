@@ -29,7 +29,6 @@ docker compose up --build -d
 ```
 
 ```bash
-curl -s http://localhost:18310/api/lab/info | jq .
 curl -s http://localhost:18313/api/dlq/summary | jq .
 ```
 

@@ -21,7 +21,6 @@ Topology: **1 master**, **3 replicas**, **3 Sentinels** (quorum 2). Writes go to
 
 ```bash
 docker compose up --build -d
-curl -s http://localhost:18400/api/lab/info | jq .
 curl -s -X POST http://localhost:18400/api/traffic/start | jq .
 ```
 

@@ -37,11 +37,6 @@ From `labs/redis-streams/04-ordering-sharded-streams/`:
 docker compose up --build -d
 ```
 
-```bash
-curl -s http://localhost:18200/api/lab/info | jq .
-curl -s http://localhost:18210/api/lab/info | jq .
-```
-
 Observability:
 
 - Prometheus: [http://localhost:9094](http://localhost:9094)

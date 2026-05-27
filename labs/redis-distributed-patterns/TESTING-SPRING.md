@@ -8,8 +8,8 @@ Uses the same Redis as **TESTING.md**. Scenarios 1–2 are easiest in `redis-cli
 cd labs/redis-distributed-patterns/01-distributed-lock-lease
 docker compose up --build -d
 docker compose ps
-curl -s http://localhost:18100/api/lab/info | jq .
-curl -s http://localhost:18101/api/lab/info | jq .
+curl -s http://localhost:18100/actuator/health | jq .
+curl -s http://localhost:18101/actuator/health | jq .
 ```
 
 

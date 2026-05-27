@@ -4,7 +4,6 @@ Run everything from `02-cluster-resharding/`.
 
 ```bash
 docker compose up --build -d
-curl -s http://localhost:18410/api/lab/info | jq .
 ```
 
 ---

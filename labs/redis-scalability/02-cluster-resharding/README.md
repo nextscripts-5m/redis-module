@@ -18,7 +18,6 @@ Three masters (no replicas in v1), optional **4th master** via compose profile `
 
 ```bash
 docker compose up --build -d
-curl -s http://localhost:18410/api/lab/info | jq .
 curl -s -X POST 'http://localhost:18410/api/load/start?profile=hotspot' | jq .
 ```
 

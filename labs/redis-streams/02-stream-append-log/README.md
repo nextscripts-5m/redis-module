@@ -27,14 +27,6 @@ docker compose up --build -d
 docker compose ps
 ```
 
-```bash
-curl -s http://localhost:18090/api/lab/info | jq .
-```
-
-```bash
-curl -s http://localhost:18091/api/lab/info | jq .
-```
-
 Observability:
 
 - Prometheus: [http://localhost:9092](http://localhost:9092)

@@ -24,14 +24,13 @@
   - [TTL and expiration](#ttl-and-expiration)
   - [Worked example: TTL and key lifecycle](#worked-example-ttl-and-key-lifecycle)
   - [Eviction policies](#eviction-policies)
-  - [Worked example: eviction under a small `maxmemory`](#worked-example-eviction-under-a-small-maxmemory)
+  - [Example: eviction under a small `maxmemory`](#example-eviction-under-a-small-maxmemory)
 - [Persistence Modes and Trade-offs](#persistence-modes-and-trade-offs)
 - [Deployment Models (Preview)](#deployment-models-preview)
   - [Single node](#single-node)
   - [Redis Replication](#redis-replication)
   - [Sentinel](#sentinel)
   - [Cluster](#cluster)
-- [Key Takeaways](#key-takeaways)
 - [Reference](#reference)
 
 
@@ -659,11 +658,10 @@ When memory is constrained, Redis applies the configured eviction policy. Common
 - `allkeys-lfu`
 - `volatile-lfu`
 
-* **LRU vs LFU (same `allkeys` / `volatile` split):** `*-lru` favors **recency** (“not used lately”); `*-lfu` favors **sustained traffic** (“rarely used overall”). Both are **approximate** in Redis for speed and memory.
+* **`allkeys-*`** — can evict any key; **`volatile-*`** — only keys with a TTL.
+* **LRU** — evicts keys **not read recently**; **LFU** — evicts keys **read least often**. Both use **approximate** counters in Redis.
 
-### Worked example: eviction under a small `maxmemory`
-
-Run this only on a **local / disposable** Redis (Docker or dev instance). You temporarily cap memory and force Redis to **drop keys** to stay under the limit.
+### Example: eviction under a small `maxmemory`
 
 1. **Snapshot current settings** (so you can restore them):
 
@@ -681,7 +679,7 @@ Run this only on a **local / disposable** Redis (Docker or dev instance). You te
    OK
    ```
 
-3. **Fill memory** with many string keys in one go (Lua loop—no shell script required). Values are a few hundred bytes each so total size quickly exceeds `maxmemory`:
+3. **Fill memory** with many string keys in one go. Values are a few hundred bytes each so total size quickly exceeds `maxmemory`:
 
    ```bash
    > EVAL "for i=1,12000 do redis.call('SET','labfill:'..i, string.rep('x', 400)) end return redis.call('DBSIZE')" 0
@@ -701,7 +699,6 @@ Run this only on a **local / disposable** Redis (Docker or dev instance). You te
 
    Under `allkeys-lru`, **reads and writes to hot keys** tend to survive longer; **cold** `labfill:*` keys are typical eviction victims—exact IDs vary because LRU is **sampled**, not a perfect global ranking.
 
-Architectural implication: eviction strategy must match business semantics. For example, evicting session keys and evicting cache keys have very different consequences.
 
 ## Persistence Modes and Trade-offs
 
@@ -781,13 +778,6 @@ Redis supports different durability profiles:
 
 ![](./images/redis-cluster.png)
 
-## Key Takeaways
-
-- Redis performance is primarily a latency-architecture story, not only a feature story.
-- Data structure choice should encode business semantics (order, uniqueness, ranking, replay).
-- Atomic commands are powerful, but transactional expectations must stay realistic.
-- TTL, eviction, and persistence are first-class design decisions.
-- Deployment topology changes operational guarantees and failure behavior.
 
 ## Reference
 

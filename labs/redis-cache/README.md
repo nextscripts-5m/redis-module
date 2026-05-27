@@ -22,8 +22,6 @@ From `labs/redis-cache/`:
 ```bash
 docker compose up --build -d
 docker compose ps
-curl -s http://localhost:8080/api/lab/info
-curl -s http://localhost:8081/api/lab/info
 ```
 
 **Simulated DB delay** (milliseconds, default **80** in `application.yaml`), the same for both instances:
@@ -41,14 +39,14 @@ docker compose exec redis redis-cli FLUSHDB
 **Observability**
 
 - Prometheus: [http://localhost:9090](http://localhost:9090) → *Status → Targets* (check `cache-with-redis` and `cache-nocache`).
-- Grafana: [http://localhost:3000](http://localhost:3000) → *Dashboards* menu → **Redis cache lab — HTTP latency** (p95 and mean latency for `/api/articles/*` requests).
+- Grafana: [http://localhost:3000](http://localhost:3000) → *Dashboards* menu → **Redis cache lab — HTTP latency** (p95 and mean latency for `/api/articles/`* requests).
 - Jaeger: [http://localhost:16686](http://localhost:16686) → select service `redis-cache-lab`, then search traces after sending some API traffic.
 
 ---
 
 ## 2. Exercise the API (cached instance only)
 
-Seeded articles use ids **1**, **2**, and **3** (see `src/main/resources/data.sql`). **Always use port 8080** for PUT/DELETE so Redis and H2 stay aligned with this README.
+Seeded articles use ids **1**, **2**, and **3** (see `src/main/resources/data.sql`)
 
 ```bash
 # read
@@ -69,7 +67,7 @@ After `PUT`/`DELETE`, the **next** `GET` for that id is slow again (miss), then 
 
 ## 3. Parallel benchmark (Docker)
 
-Generate traffic on **both** ports, then inspect the charts in Grafana (last 15 minutes, 5s refresh).
+Generate traffic on **both** ports, then inspect the charts in Grafana.
 
 ```bash
 ./scripts/bench-reads.sh http://localhost:8080 30
@@ -77,17 +75,6 @@ Generate traffic on **both** ports, then inspect the charts in Grafana (last 15 
 ```
 
 On **8080** expect the first request slow and the following ones much faster (until TTL, eviction, or a write). On **8081** each line stays near `APP_SIMULATED_DB_DELAY_MS` plus overhead.
-
-### Optional load with `hey`
-
-If you have [hey](https://github.com/rakyll/hey):
-
-```bash
-hey -n 200 -c 10 http://localhost:8080/api/articles/1
-hey -n 200 -c 10 http://localhost:8081/api/articles/1
-```
-
-Compare requests/sec and latency with the Prometheus/Grafana panels.
 
 ---
 

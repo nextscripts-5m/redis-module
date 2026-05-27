@@ -22,9 +22,6 @@ From `labs/redis-streams/01-pubsub-live-broadcast/`:
 ```bash
 docker compose up --build -d
 docker compose ps
-curl -s http://localhost:18080/api/lab/info | jq .
-curl -s http://localhost:18081/api/lab/info | jq .
-curl -s http://localhost:18082/api/lab/info | jq .
 ```
 
 Observability:

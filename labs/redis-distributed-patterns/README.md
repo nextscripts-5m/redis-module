@@ -22,7 +22,7 @@ Follow **TESTING.md** at the `127.0.0.1:6379>` prompt.
 
 ```bash
 docker compose up --build -d
-curl -s http://localhost:18100/api/lab/info | jq .
+curl -s http://localhost:18100/actuator/health | jq .
 ```
 
 See **TESTING-SPRING.md** for the curl timeline (`releaseMode=unsafe` vs `safe`).

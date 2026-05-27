@@ -2,7 +2,6 @@
 
 ```bash
 docker compose up --build -d
-curl -s http://localhost:18400/api/lab/info | jq .
 ```
 
 ## Scenario 1 — Replication lag / stale reads
