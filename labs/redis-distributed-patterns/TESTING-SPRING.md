@@ -1,11 +1,11 @@
 # Lab 1 — Spring testing guide (Scenario 3 vs 4)
 
-Uses the same Redis as **TESTING.md**. Scenarios 1–2 are easiest in `redis-cli`; this guide covers **Scenario 3 (unsafe `DEL`)** and **Scenario 4 (safe Lua release)** over HTTP.
+This guide covers **Scenario 3 (unsafe** `DEL`**)** and **Scenario 4 (safe Lua release)** over HTTP.
 
 ## Start
 
 ```bash
-cd labs/redis-distributed-patterns/01-distributed-lock-lease
+cd labs/redis-distributed-patterns
 docker compose up --build -d
 docker compose ps
 curl -s http://localhost:18100/actuator/health | jq .
@@ -27,12 +27,12 @@ POST /api/orders/{orderId}/process?lockTtlMs=2000&processingDelayMs=5000&release
 ```
 
 
-| Query param          | Default    | Meaning                                |
-| -------------------- | ---------- | -------------------------------------- |
-| `releaseMode`        | `**safe**` | Lua: delete only if owner matches      |
-| `releaseMode=unsafe` | —          | Blind `DEL` (Scenario 3 anti-pattern)  |
-| `lockTtlMs`          | `2000`     | Lease length (ms)                      |
-| `processingDelayMs`  | `5000`     | Simulated work while holding lock (ms) |
+| Query param          | Default | Meaning                                |
+| -------------------- | ------- | -------------------------------------- |
+| `releaseMode`        | `safe`  | Lua: delete only if owner matches      |
+| `releaseMode=unsafe` | —       | Blind `DEL` (Scenario 3 anti-pattern)  |
+| `lockTtlMs`          | `2000`  | Lease length (ms)                      |
+| `processingDelayMs`  | `5000`  | Simulated work while holding lock (ms) |
 
 
 ---
@@ -73,7 +73,7 @@ When the first curl returns (~5 s total):
 
 ## Scenario 4 — Safe release (`releaseMode=safe`)
 
-Repeat with a clean key. Use `**releaseMode=safe`** on worker-a (default if omitted).
+Repeat with a clean key. Use `releaseMode=safe` on worker-a (default if omitted).
 
 ```bash
 curl -s -X POST 'http://localhost:18100/api/orders/88/process?lockTtlMs=2000&processingDelayMs=5000&releaseMode=safe' | jq .

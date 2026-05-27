@@ -1,6 +1,6 @@
 # Lab 1 — Testing guide
 
-From `01-distributed-lock-lease/`:
+From `labs/redis-distributed-patterns/`:
 
 ```bash
 docker compose up -d
