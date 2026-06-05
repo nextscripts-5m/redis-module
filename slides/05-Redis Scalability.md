@@ -117,7 +117,7 @@ So replication alone is **not** high availability: you need **Sentinel** or **Cl
 
 ### Read scaling and consistency on replicas
 
-**Strategy pattern (read routing):** applications choose a **read policy** per endpoint:
+**A**pplications may choose  a different **read policy** per endpoint:
 
 
 | Policy                     | Behavior                                                         | Fit                                             |
@@ -299,10 +299,10 @@ Redis is often described as **AP**-leaning in the CAP sense for replicated setup
 ### Choosing a deployment model
 
 
-| Need                              | Start here                                          | Grow to                                           |
-| --------------------------------- | --------------------------------------------------- | ------------------------------------------------- |
-| HA, single dataset, moderate size | Primary + replicas + **Sentinel**                   | Cluster when write/memory ceiling hit             |
-| Large dataset or write scale      | **Cluster** (+ replicas per shard)                  | Multi-cluster by domain if blast radius too large |
+| Need                              | Start here                         | Grow to                                           |
+| --------------------------------- | ---------------------------------- | ------------------------------------------------- |
+| HA, single dataset, moderate size | Primary + replicas + **Sentinel**  | Cluster when write/memory ceiling hit             |
+| Large dataset or write scale      | **Cluster** (+ replicas per shard) | Multi-cluster by domain if blast radius too large |
 
 
 ---
