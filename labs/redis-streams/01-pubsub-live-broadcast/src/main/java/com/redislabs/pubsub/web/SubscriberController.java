@@ -2,6 +2,7 @@ package com.redislabs.pubsub.web;
 
 import com.redislabs.pubsub.messaging.ReceivedMessage;
 import com.redislabs.pubsub.messaging.RecentMessages;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -10,6 +11,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/subscriber")
+@ConditionalOnProperty(name = "app.role", havingValue = "subscriber")
 public class SubscriberController {
 
     private final RecentMessages recentMessages;
