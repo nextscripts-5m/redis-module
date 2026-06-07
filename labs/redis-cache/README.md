@@ -1,21 +1,20 @@
 # Lab: Chapter 2 — Redis caching with Spring (`redis-cache`)
 
-Default Docker stack: **two app instances in parallel** (same artifact, different profiles), **Redis**, **Prometheus**, **Grafana**, and **Jaeger**.
+Two instances of the **same application** run in parallel: one with **Spring Cache + Redis**, one with caching **disabled**. Both use the same simulated database latency so you can compare read performance fairly.
 
 
-| Compose service     | Host port | Role                                                                                       |
-| ------------------- | --------- | ------------------------------------------------------------------------------------------ |
-| `cache-lab-with`    | **8080**  | Spring Cache + Redis (`cache-aside`, eviction)                                             |
-| `cache-lab-nocache` | **8081**  | `nocache` profile: no cache, no Redis. Reads / benchmarks only, for latency comparison.    |
-| `redis`             | 6379      | Cache backend for the `:8080` instance only.                                               |
-| `prometheus`        | 9090      | Scrapes `/actuator/prometheus` on both apps (jobs `cache-with-redis` and `cache-nocache`). |
-| `grafana`           | 3000      | Pre-provisioned dashboard (anonymous Admin access for the demo).                           |
-| `jaeger`            | 16686     | Trace UI. Both app instances export OTLP traces to Jaeger.                                 |
+| Compose service     | Host port | Role                                                        |
+| ------------------- | --------- | ----------------------------------------------------------- |
+| `cache-lab-with`    | **8080**  | Cache-aside on reads; `@CacheEvict` on writes               |
+| `cache-lab-nocache` | **8081**  | `nocache` profile — every read goes to the (slow) datastore |
+| `redis`             | 6379      | Cache backend for `:8080` only                              |
 
+
+Seeded article ids: **1**, **2**, **3** (`src/main/resources/data.sql`).
 
 ---
 
-## 1. Run with Docker
+## 1. Start the stack
 
 From `labs/redis-cache/`:
 
@@ -24,57 +23,69 @@ docker compose up --build -d
 docker compose ps
 ```
 
-**Simulated DB delay** (milliseconds, default **80** in `application.yaml`), the same for both instances:
+Simulated datastore delay (milliseconds, default **80**):
 
 ```bash
 APP_SIMULATED_DB_DELAY_MS=150 docker compose up --build -d
 ```
 
-**Cold cache** (Redis-backed instance on `:8080` only):
+Reset Redis cache (optional, before a cold-cache demo on `:8080`):
 
 ```bash
 docker compose exec redis redis-cli FLUSHDB
 ```
 
-**Observability**
+---
 
-- Prometheus: [http://localhost:9090](http://localhost:9090) → *Status → Targets* (check `cache-with-redis` and `cache-nocache`).
-- Grafana: [http://localhost:3000](http://localhost:3000) → *Dashboards* menu → **Redis cache lab — HTTP latency** (p95 and mean latency for `/api/articles/`* requests).
-- Jaeger: [http://localhost:16686](http://localhost:16686) → select service `redis-cache-lab`, then search traces after sending some API traffic.
+## 2. Compare latency (main exercise)
+
+Run the side-by-side benchmark:
+
+```bash
+chmod +x scripts/compare-cache.sh
+./scripts/compare-cache.sh 30
+```
+
+**What to expect**
+
+
+| Instance               | Pattern                                                                                |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| **:8080** (with cache) | Request 1 slow (80 ms+) — **cache miss**. Requests 2..N fast (few ms) — **cache hit**. |
+| **:8081** (no cache)   | Every request slow (~80 ms+) — always hits simulated DB.                               |
+
+
+The script prints per-request times plus `avg (all)` and `avg (warm)` (from request 2 onward on the cached instance). Compare **warm avg on :8080** with **avg on :8081** to see the speedup.
+
+Optional arguments: `./scripts/compare-cache.sh [COUNT] [ARTICLE_ID]`
 
 ---
 
-## 2. Exercise the API (cached instance only)
+## 3. Cache hit, miss, and eviction (manual)
 
-Seeded articles use ids **1**, **2**, and **3** (see `src/main/resources/data.sql`)
+Use **:8080** only. Measure time with `curl -w "%{time_total}"`.
+
+### 3.1 Warm cache
 
 ```bash
-# read
-curl -s http://localhost:8080/api/articles/1 | jq .
+curl -s -o /dev/null -w "GET #1: %{time_total}s\n" http://localhost:8080/api/articles/1
+curl -s -o /dev/null -w "GET #2: %{time_total}s\n" http://localhost:8080/api/articles/1
+```
 
-# update (evicts cache for id 1)
+First GET slow (miss), second fast (hit).
+
+### 3.2 Eviction after PUT
+
+```bash
 curl -s -X PUT http://localhost:8080/api/articles/1 \
   -H 'Content-Type: application/json' \
   -d '{"title":"Alpha (updated)","content":"new body"}' | jq .
 
-# delete (evict then remove row)
-curl -s -X DELETE http://localhost:8080/api/articles/3 -w "\nHTTP %{http_code}\n"
+curl -s -o /dev/null -w "GET after PUT #1: %{time_total}s\n" http://localhost:8080/api/articles/1
+curl -s -o /dev/null -w "GET after PUT #2: %{time_total}s\n" http://localhost:8080/api/articles/1
 ```
 
-After `PUT`/`DELETE`, the **next** `GET` for that id is slow again (miss), then fast on repeated GETs while caching is enabled.
-
----
-
-## 3. Parallel benchmark (Docker)
-
-Generate traffic on **both** ports, then inspect the charts in Grafana.
-
-```bash
-./scripts/bench-reads.sh http://localhost:8080 30
-./scripts/bench-reads.sh http://localhost:8081 30
-```
-
-On **8080** expect the first request slow and the following ones much faster (until TTL, eviction, or a write). On **8081** each line stays near `APP_SIMULATED_DB_DELAY_MS` plus overhead.
+`@CacheEvict` removes `articles::1` from Redis. The first GET after PUT is slow again (miss), then fast on repeat.
 
 ---
 
