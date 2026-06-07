@@ -84,22 +84,6 @@ Replay from a specific ID returned by a previous `POST /api/orders`:
 curl -s "http://localhost:18092/api/replay?from=1715600000000-0&count=20" | jq .
 ```
 
-`/api/events` and `/api/replay?from=0-0` may return similar data, but they are used for different teaching points:
-
-```text
-/api/events
-  Inspect what is currently stored in the stream.
-
-/api/replay?from=...
-  Show that a client can replay the stream from a specific ID.
-```
-
-In normal `XREAD`, Redis does not remember the cursor for the client. This lab stores the reader cursor in Redis under:
-
-```text
-order-events:stream-reader:last-id
-```
-
 Inspect it:
 
 ```bash
@@ -150,7 +134,6 @@ The restarted reader has actually consumed and processed the retained events.
 
 So this shows that the reader resumed from its cursor and processed those events. |
 
-
 The reader catches up because the stream retained the events and the reader resumed from its last stored ID.
 
 ## 6. Simulate Reader Failures
@@ -173,6 +156,19 @@ done
 
 When the reader fails a message, it does **not** advance its cursor. The same entry can be read again later. This is not a Redis consumer group retry; it is simple client-side cursor management.
 
+Inspect failed reader attempts:
+
+```bash
+curl -s http://localhost:18091/api/reader/messages | jq .
+```
+
+This endpoint shows failed attempts too, with:
+
+- `"processed": false`
+- `"outcome": "simulated failure; cursor not advanced"`
+
+If a retry succeeds later, the same `eventId` can appear twice: first as failed, then with `"processed": true` and `"outcome": "processed; cursor advanced"`.
+
 Open Grafana and compare:
 
 - stream length;
@@ -181,6 +177,8 @@ Open Grafana and compare:
 - replay requests;
 - reader failures;
 - reader processing latency.
+
+
 
 ## 7. Reset the Lab
 
