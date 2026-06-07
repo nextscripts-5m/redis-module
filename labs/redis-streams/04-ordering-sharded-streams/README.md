@@ -16,8 +16,6 @@ This lab compares two models on Redis Streams consumer groups:
 | `sharded-producer-api`   | 18210     | Part B producer with shard routing.                  |
 | `shard-worker-0` … `3`   | 18211–14  | Part B one consumer per lane `orders:N`.             |
 | `redis`                  | 6383      | Redis.                                               |
-| `prometheus`             | 9094      | Metrics.                                             |
-| `grafana`                | 3004      | Dashboard **Redis Streams ordering vs sharded lab**. |
 
 
 Processing delays (defaults):
@@ -36,11 +34,6 @@ From `labs/redis-streams/04-ordering-sharded-streams/`:
 ```bash
 docker compose up --build -d
 ```
-
-Observability:
-
-- Prometheus: [http://localhost:9094](http://localhost:9094)
-- Grafana: [http://localhost:3004](http://localhost:3004)
 
 ## 2. Part A — Ordering Violation (Unordered)
 
@@ -76,8 +69,6 @@ Inspect completions (note timestamps and types):
 ```bash
 curl -s http://localhost:18201/api/worker/messages | jq .
 ```
-
-Grafana: panel **Ordering violations (unordered)** and **Ordering violation rate**.
 
 ## 3. Part B — Per-Order Ordering (Sharded)
 
