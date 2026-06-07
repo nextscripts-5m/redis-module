@@ -40,9 +40,9 @@ public class TrafficController {
         return Map.of("key", "lab:counter", "value", value);
     }
 
-    @GetMapping("/read/{replicaId}")
-    public Map<String, String> readReplica(@PathVariable String replicaId) {
-        String value = traffic.readFromReplica(replicaId);
-        return Map.of("replicaId", replicaId, "value", value != null ? value : "");
+    @GetMapping("/read/{host}")
+    public Map<String, String> readReplica(@PathVariable String host) {
+        String value = traffic.readFromReplica(host);
+        return Map.of("host", host, "value", value != null ? value : "");
     }
 }

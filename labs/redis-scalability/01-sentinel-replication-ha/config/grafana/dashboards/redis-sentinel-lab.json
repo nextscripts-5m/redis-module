@@ -32,12 +32,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by (instance) (rate(redis_commands_total{cmd=\"set\"}[1m]))",
+          "expr": "sum by (instance) (rate(redis_commands_total{cmd=\"set\"}[1m]) and on(instance) (redis_instance_info{role=\"master\"} == 1))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
-      "title": "Write ops/s per node (SET)",
+      "title": "Write ops/s (master only, client SET)",
       "type": "timeseries"
     },
     {
@@ -64,12 +64,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum by (instance) (rate(redis_commands_total{cmd=\"get\"}[1m]))",
+          "expr": "sum by (instance) (rate(redis_commands_total{cmd=\"get\"}[1m]) and on(instance) (redis_instance_info{role=\"slave\"} == 1))",
           "legendFormat": "{{instance}}",
           "refId": "A"
         }
       ],
-      "title": "Read ops/s per node (GET)",
+      "title": "Read ops/s (replicas only, client GET)",
       "type": "timeseries"
     },
     {

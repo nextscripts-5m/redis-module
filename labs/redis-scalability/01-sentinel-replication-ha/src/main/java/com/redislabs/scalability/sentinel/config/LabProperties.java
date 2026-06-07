@@ -9,13 +9,14 @@ public record LabProperties(
         String counterKey,
         long writeIntervalMs,
         long readIntervalMs,
-        String replicaHosts) {
+        long topologyRefreshMs,
+        String redisNodes) {
 
-    public List<String> replicaHostList() {
-        if (replicaHosts == null || replicaHosts.isBlank()) {
+    public List<String> redisNodeList() {
+        if (redisNodes == null || redisNodes.isBlank()) {
             return List.of();
         }
-        return Arrays.stream(replicaHosts.split(","))
+        return Arrays.stream(redisNodes.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
                 .toList();
