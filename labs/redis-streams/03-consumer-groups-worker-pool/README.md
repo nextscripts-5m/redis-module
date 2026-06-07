@@ -134,38 +134,7 @@ curl -s http://localhost:18101/api/worker/pending | jq .
 curl -s http://localhost:18101/api/worker/pending/entries | jq .
 ```
 
-Or use Redis CLI:
-
-```bash
-docker compose exec redis redis-cli XPENDING order-events billing
-docker compose exec redis redis-cli XPENDING order-events billing - + 10
-```
-
-## 6. Stop One Billing Worker
-
-```bash
-docker compose stop billing-worker-2
-```
-
-Produce more events:
-
-```bash
-for i in $(seq 1 8); do
-  curl -s -X POST http://localhost:18100/api/orders \
-    -H 'Content-Type: application/json' \
-    -d "{\"type\":\"order-updated\",\"orderId\":\"$i\",\"payload\":{\"source\":\"single-billing-worker\"}}" > /dev/null
-done
-```
-
-Only `billing-worker-1` continues to consume from the `billing` group. Restart the second worker:
-
-```bash
-docker compose start billing-worker-2
-```
-
-After restart, `**billing-worker-2` does not replay** the events that `billing-worker-1` already received and acknowledged while worker-2 was stopped. 
-
-## 7. Reset the Lab
+## 6. Reset the Lab
 
 ```bash
 curl -s -X DELETE http://localhost:18100/api/events | jq .
