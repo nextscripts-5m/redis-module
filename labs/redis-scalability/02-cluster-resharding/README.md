@@ -24,18 +24,6 @@ docker compose up --build -d
 
 ---
 
-**Healthy loader** (check after Phase C):
-
-```bash
-curl -s http://localhost:18410/api/load/stats | jq .
-```
-
-- `running: true`
-- `commandsOk` increasing **much faster** than `commandErrors`
-- If `commandErrors` grows hundreds per second while `commandsOk` barely moves → **Phase C was skipped** (loader still bootstrapped with 3 nodes only)
-
----
-
 ## Scenario 1 — Slots and hash tags
 
 **Goal:** see that keys map to different slots; `{hot}` forces the same slot.
@@ -54,7 +42,7 @@ curl -s 'http://localhost:18410/api/keys/%7Bhot%7D:key:2/slot' | jq .
 
 - `{hot}:key:1` and `{hot}:key:2` → **same** `slot` (e.g. 6093).
 - `user:42` → **different** slot (e.g. 15880).
-- `host` in JSON is a Docker IP (reachable from the app in compose, not from the Mac).
+- `host` in JSON is a Docker IP.
 
 ```bash
 docker compose exec cluster-1 redis-cli CLUSTER NODES
@@ -157,8 +145,6 @@ docker compose exec cluster-1 redis-cli --cluster reshard cluster-1:6379 \
   --cluster-yes
 ```
 
-It moves **4096 slots from** `cluster-1` **to** `cluster-4`. If Grafana shows the hot master is `cluster-2` or `cluster-3`, replace `cluster-1` in `FROM_ID` and `--cluster-from` with that service name (e.g. `docker compose exec -T cluster-2 redis-cli cluster myid`).
-
 Resharding can take **1–3 minutes**. Do not stop the load.
 
 **During Phase B (Grafana):**
@@ -201,30 +187,6 @@ Restart load:
 curl -s -X POST 'http://localhost:18410/api/load/start?profile=hotspot' | jq .
 ```
 
-### Phase D — After Phase C (60–120s)
-
-**Grafana:**
-
-
-| Panel              | vs Phase A                                                            |
-| ------------------ | --------------------------------------------------------------------- |
-| **Redis ops/s**    | More lines active; former hot master **lower**; **cluster-4** visible |
-| **Load imbalance** | **Lower** (toward 1–3)                                                |
-| **Loader errors**  | **errors/s** → ~0                                                     |
-
-
-**API:**
-
-```bash
-curl -s http://localhost:18410/api/load/stats | jq .
-```
-
-**Expected:** `commandsOk` rising fast; `commandErrors` nearly flat (totals from Phase B remain, but new errors should be rare).
-
-```bash
-docker compose exec cluster-1 redis-cli CLUSTER NODES | head -20
-```
-
 ---
 
 ## Scenario 5 — Same slot, different owner
@@ -239,14 +201,6 @@ docker compose exec cluster-1 redis-cli CLUSTER NODES
 ```
 
 Find the row whose range **includes** `$SLOT` (e.g. `6093` → `5461-9556` on the new master). `CLUSTER NODES` shows **IP ranges**, not hostnames like `cluster-4`.
-
-Confirm which service owns that range:
-
-```bash
-docker compose exec cluster-4 redis-cli CLUSTER NODES | grep myself
-```
-
-**Expected:** `CLUSTER KEYSLOT` **unchanged**; the slot range moved to **cluster-4** (or whichever node received the resharded slots).
 
 ---
 
