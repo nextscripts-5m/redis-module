@@ -381,6 +381,7 @@ SCARD SocialMedia
   * hash functions must produce outputs that are evenly and randomly distributed
 
 *an example with 3 hash functions and a bit array of 10 bits*
+
 ![](./images/bloom-filter-2.png)
 
 ![](./images/bloom-filter-3.png)
@@ -390,7 +391,7 @@ SCARD SocialMedia
 **Performance**
 
 * Insertion in a Bloom filter is `O(K)`, where `k` is the number of hash functions.
-* Checking for an item is `O(K)` or `O(K*n)` for stacked filters, where `n` is the number of stacked filters.
+* Checking for an item is `O(K)`.
 
 **Try it out!**
 
