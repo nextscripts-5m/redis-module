@@ -105,15 +105,16 @@ Replication is **asynchronous** by default: the primary acknowledges the client 
 ### What replication improves (and what it does not)
 
 
-| Dimension                         | With replicas                                         | Without scaling writes             |
-| --------------------------------- | ----------------------------------------------------- | ---------------------------------- |
-| **Read**                          | Can scale out reads to N replicas (minus staleness)   | —                                  |
-| **Write**                         | Still bounded by **one** primary                      | Same                               |
-| **Total memory for one dataset**  | Full copy per replica (no sharding)                   | Same                               |
-| **Availability on primary death** | Replicas exist but are **not** promoted automatically | Writes stop until manual promotion |
+| Dimension            | What replicas improve                          | What replicas do **not** improve                              |
+| -------------------- | ---------------------------------------------- | ------------------------------------------------------------- |
+| **Reads**            | Distribute `GET`/stream reads across N replicas | —                                                             |
+| **Writes**           | —                                              | Still one primary: write throughput unchanged                 |
+| **Dataset memory**   | —                                              | Each replica holds a full copy; no sharding of the dataset    |
+| **Freshness**        | —                                              | Replicas may be stale (async replication lag)                 |
+| **Availability**     | Data copy ready for manual failover            | No automatic promotion without **Sentinel** or **Cluster**    |
 
 
-So replication alone is **not** high availability: you need **Sentinel** or **Cluster** to promote a replica when the primary fails.
+**Replication alone is not high availability.** You need **Sentinel** or **Cluster** to promote a replica automatically when the primary fails. Adding two replicas also means roughly **3× memory** for the same dataset (one primary + two full copies).
 
 ### Read scaling and consistency on replicas
 
