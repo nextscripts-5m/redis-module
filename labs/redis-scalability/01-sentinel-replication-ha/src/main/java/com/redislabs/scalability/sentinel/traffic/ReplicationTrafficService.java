@@ -106,6 +106,7 @@ public class ReplicationTrafficService {
         if (node == null) {
             throw new IllegalArgumentException("Unknown node: " + hostOrNodeId);
         }
+        // Redis: GET lab:counter  (direct on replica host)
         return node.commands().get(props.counterKey());
     }
 
@@ -123,6 +124,7 @@ public class ReplicationTrafficService {
 
     public String writeOnce() {
         String value = System.currentTimeMillis() + "-" + writeSeq.incrementAndGet();
+        // Redis: SET lab:counter <value>  (on current master; Spring resolves master via Sentinel)
         masterTemplate.opsForValue().set(props.counterKey(), value);
         lastWritten.set(value);
         writesTotal.increment();
@@ -159,6 +161,7 @@ public class ReplicationTrafficService {
         for (String nodeId : props.redisNodeList()) {
             try {
                 RedisNodeConnection node = connectionFor(nodeId);
+                // Redis: INFO replication  → read role:master / role:slave
                 String role = roleChecker.role(node);
                 if ("master".equals(role)) {
                     masterId = nodeId;
@@ -209,9 +212,11 @@ public class ReplicationTrafficService {
         while (running && !Thread.currentThread().isInterrupted()) {
             try {
                 RedisNodeConnection node = connectionFor(nodeId);
+                // Redis: INFO replication  (exit loop if this node was promoted to master)
                 if (!"slave".equals(roleChecker.role(node))) {
                     return;
                 }
+                // Redis: GET lab:counter  (direct on replica host)
                 String read = node.commands().get(props.counterKey());
                 readsTotal.increment();
                 String expected = lastWritten.get();
