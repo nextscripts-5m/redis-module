@@ -99,12 +99,6 @@ The **fixed-window counter** splits time into **fixed intervals** (seconds, minu
 3. **Reset** — when the window ends, the counter is discarded or recreated (typically **TTL on the key**).
 4. **Enforce** — if `count >= limit`, deny; otherwise allow and increment.
 
-**Decision flow (each incoming request)**
-
-1. **Read** the current count for that scope (if the key does not exist, treat the count as **0**).
-2. If the count is already **≥ limit** → **deny** (policy choice: skip increment or still record—most APIs simply reject).
-3. Otherwise **allow** this request: **increment** the counter and attach a **TTL** that matches the window length so the key disappears when the window ends (next window starts fresh).
-
 `PEXPIRE key milliseconds` — sets the key’s **remaining lifetime** in milliseconds; when it expires, Redis deletes the key so the counter resets for the next clock window.
 
 `PEXPIRE key ms NX` — applies that TTL **only if the key does not already have one**. If a TTL is already counting down, the command **does not** extend or replace it. That pins the window end on the **first** write of the interval instead of **sliding** the deadline on every request.
