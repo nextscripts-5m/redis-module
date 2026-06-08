@@ -28,24 +28,24 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
       "id": 2,
-      "targets": [{ "expr": "redis_cluster_slots_assigned", "legendFormat": "assigned", "refId": "A" }],
-      "title": "Slots assigned",
+      "targets": [{ "expr": "max(redis_cluster_slots_assigned)", "legendFormat": "assigned", "refId": "A" }],
+      "title": "Slots assigned (cluster total)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 6, "w": 8, "x": 8, "y": 8 },
       "id": 3,
-      "targets": [{ "expr": "redis_cluster_slots_fail", "legendFormat": "fail", "refId": "A" }],
-      "title": "Slots fail",
+      "targets": [{ "expr": "max(redis_cluster_slots_fail)", "legendFormat": "fail", "refId": "A" }],
+      "title": "Slots fail (cluster total)",
       "type": "stat"
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "gridPos": { "h": 6, "w": 8, "x": 16, "y": 8 },
       "id": 4,
-      "targets": [{ "expr": "redis_cluster_known_nodes", "legendFormat": "nodes", "refId": "A" }],
-      "title": "Known nodes",
+      "targets": [{ "expr": "max(redis_cluster_known_nodes)", "legendFormat": "nodes", "refId": "A" }],
+      "title": "Known nodes (cluster total)",
       "type": "stat"
     },
     {
@@ -84,5 +84,5 @@
   "time": { "from": "now-15m", "to": "now" },
   "title": "Redis Cluster resharding lab",
   "uid": "redis-cluster-reshard-lab",
-  "version": 1
+  "version": 2
 }
