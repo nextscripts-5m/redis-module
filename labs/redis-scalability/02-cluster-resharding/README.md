@@ -54,28 +54,45 @@ docker compose exec cluster-1 redis-cli CLUSTER NODES
 
 **Goal:** see the MOVED error when the client **does not** follow the redirect.
 
-**Step 1 — MOVED without following redirect (from host, OK):**
+**Step 1 — Find the slot owner for `user:remote:1`**
 
 ```bash
-redis-cli -p 6402 SET user:remote:1 other
+docker compose exec cluster-1 redis-cli CLUSTER KEYSLOT user:remote:1
+docker compose exec cluster-1 redis-cli CLUSTER NODES
 ```
 
-**Expected:** text response like `MOVED <slot> 172.19.x.x:6379` (no write).
+**Expected:** a slot number (e.g. `12679`). In `CLUSTER NODES`, find which master owns that slot in its range
 
-**Step 2 — SET with redirect (inside Docker):**
+(same mapping via API):
+
+```bash
+curl -s http://localhost:18410/api/keys/user:remote:1/slot | jq .
+```
+
+**Step 2 — SET on a node that does *not* own the slot**
+
+Pick a master whose slot range **excludes** the slot from step 1 (e.g. **cluster-2** if the owner is cluster-1):
+
+```bash
+docker compose exec cluster-2 redis-cli SET user:remote:1 other
+```
+
+**Expected:** `MOVED <slot> <owner-ip>:6379` — the owner IP matches the master from step 1. No write yet (no `-c`).
+
+**Step 3 — SET with redirect (cluster-aware client)**
 
 ```bash
 docker compose exec cluster-1 redis-cli -c SET user:remote:1 value
 ```
 
-**Expected:** `OK` (the `-c` client reaches the slot owner).
+**Expected:** `OK` (`-c` follows `MOVED` and reaches the slot owner).
 
-**Step 3 — Proof: data lives on the slot owner (GET)**
+**Step 4 — Proof: data lives on the slot owner (GET)**
 
-Use the node from the MOVED line (example: owner on **cluster-3**):
+Use the owner from step 1 and a non-owner (e.g. cluster-2):
 
 ```bash
-docker compose exec cluster-3 redis-cli GET user:remote:1
+docker compose exec cluster-1 redis-cli GET user:remote:1
 docker compose exec cluster-2 redis-cli GET user:remote:1
 ```
 
@@ -96,7 +113,7 @@ Open [Grafana](http://localhost:3009). Wait **60–90 seconds**.
 **Expected:**
 
 1. **Redis ops/s** — one of `cluster-1` / `cluster-2` / `cluster-3` well above the others.
-2. **Load imbalance** — **> 3**, often **10+**.
+2. **Load imbalance** — **> 3**.
 3. **Loader errors** — **errors/s** near **0**.
 
 ```bash
@@ -116,8 +133,6 @@ curl -s -X POST 'http://localhost:18410/api/load/stop' | jq . 2>/dev/null || tru
 curl -s -X POST 'http://localhost:18410/api/load/start?profile=hotspot' | jq .
 ```
 
-Note in Grafana (60s): which `instance` dominates **ops/s** (e.g. `cluster-2`); high **Load imbalance**.
-
 ### Phase B — Add 4th node and reshard
 
 **Keep load running** (loader still knows only 3 nodes — errors during migration are expected).
@@ -125,6 +140,7 @@ Note in Grafana (60s): which `instance` dominates **ops/s** (e.g. `cluster-2`); 
 ```bash
 docker compose --profile scale-out up -d cluster-4 redis-exporter-4
 
+# check if new node is up
 until redis-cli -p 6405 ping 2>/dev/null | grep -q PONG; do sleep 1; done
 
 docker compose exec cluster-1 redis-cli --cluster add-node cluster-4:6379 cluster-1:6379
