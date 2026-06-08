@@ -62,6 +62,7 @@ public class OrderStreamService {
         fields.put("createdAt", Instant.now().toString());
         fields.put("payload", serialize(request.eventPayload()));
 
+        // Redis: XADD order-events * type ... orderId ... producer ... createdAt ... payload ...
         RecordId id = redisTemplate.opsForStream().add(properties.streamName(), fields);
         producedCounter.increment();
         return toEvent(id.getValue(), fields);
@@ -70,6 +71,7 @@ public class OrderStreamService {
     public List<StreamEvent> range(String from, int count) {
         replayCounter.increment();
         Range<String> range = Range.rightUnbounded(Range.Bound.inclusive(from));
+        // Redis: XRANGE order-events <from> + COUNT <n>
         return redisTemplate.opsForStream()
                 .range(properties.streamName(), range, Limit.limit().count(Math.max(1, count)))
                 .stream()
@@ -79,6 +81,7 @@ public class OrderStreamService {
 
     public List<StreamEvent> all(int count) {
         replayCounter.increment();
+        // Redis: XRANGE order-events - + COUNT <n>
         return redisTemplate.opsForStream()
                 .range(properties.streamName(), Range.unbounded(), Limit.limit().count(Math.max(1, count)))
                 .stream()
@@ -87,13 +90,16 @@ public class OrderStreamService {
     }
 
     public long clearStreamAndCursor() {
+        // Redis: DEL order-events
         Boolean streamDeleted = redisTemplate.delete(properties.streamName());
+        // Redis: DEL order-events:stream-reader:last-id
         redisTemplate.delete(properties.readerCursorKey());
         return Boolean.TRUE.equals(streamDeleted) ? 1L : 0L;
     }
 
     public long streamLength() {
         try {
+            // Redis: XLEN order-events
             Long size = redisTemplate.opsForStream().size(properties.streamName());
             return size == null ? 0L : size;
         } catch (Exception ignored) {

@@ -20,12 +20,14 @@ public class ReaderCursorService {
     }
 
     public String currentCursor() {
+        // Redis: GET order-events:stream-reader:last-id
         String cursor = redisTemplate.opsForValue().get(properties.readerCursorKey());
         return cursor == null || cursor.isBlank() ? INITIAL_CURSOR : cursor;
     }
 
     public Map<String, Object> setCursor(String cursor) {
         String safeCursor = cursor == null || cursor.isBlank() ? INITIAL_CURSOR : cursor;
+        // Redis: SET order-events:stream-reader:last-id <last-processed-stream-id>
         redisTemplate.opsForValue().set(properties.readerCursorKey(), safeCursor);
         return Map.of(
                 "reader", properties.readerName(),
@@ -35,6 +37,7 @@ public class ReaderCursorService {
     }
 
     public Map<String, Object> resetCursor() {
+        // Redis: DEL order-events:stream-reader:last-id
         redisTemplate.delete(properties.readerCursorKey());
         return Map.of(
                 "reader", properties.readerName(),

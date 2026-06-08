@@ -84,6 +84,7 @@ public class StreamReaderWorker implements ApplicationRunner, DisposableBean {
                 StreamReadOptions options = StreamReadOptions.empty()
                         .count(Math.max(1, properties.readBatchSize()))
                         .block(Duration.ofMillis(Math.max(1, properties.readBlockMs())));
+                // Redis: XREAD COUNT <n> BLOCK <ms> STREAMS order-events <cursor>
                 List<MapRecord<String, Object, Object>> records = redisTemplate.opsForStream()
                         .read(options, StreamOffset.create(properties.streamName(), ReadOffset.from(cursor)));
 
